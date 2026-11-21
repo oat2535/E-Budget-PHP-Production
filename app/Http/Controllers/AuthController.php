@@ -10,6 +10,20 @@ class AuthController extends Controller
 {
     public function showLoginForm(Request $request)
     {
+        if ($request->query('session_expired')) {
+            if (Auth::check()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+            $warning = 'ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอเกิน 1 ชั่วโมง เพื่อความปลอดภัยของข้อมูล ระบบได้ออกจากระบบอัตโนมัติแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง';
+
+            return view('auth.login', [
+                'warning' => $warning,
+                'error' => null,
+            ]);
+        }
+
         if (Auth::check()) {
             return redirect()->route('budget_list');
         }
@@ -74,6 +88,10 @@ class AuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
+        if ($request->query('session_expired')) {
+            return redirect()->route('login', ['session_expired' => 1]);
+        }
 
         return redirect()->route('login');
     }

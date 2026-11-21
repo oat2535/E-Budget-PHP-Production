@@ -1,8 +1,7 @@
 # Environment & Secrets
 .env
-.env.backup
-.env.production
-.env.django.bak
+.env.*
+!.env.example
 
 # PHP & Composer
 /vendor/

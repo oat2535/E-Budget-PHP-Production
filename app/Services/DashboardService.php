@@ -277,16 +277,26 @@ class DashboardService
         return $years;
     }
 
-    public static function buildMonthlyBudgetSqlAndParams(array $branchCodes, int $budgetYear): array
+    public static function buildMonthlyBudgetSqlAndParams(array $branchCodes, int $budgetYear, ?string $costCenter = null): array
     {
         $codes = array_values(array_unique(array_filter(array_map('trim', $branchCodes))));
         $inCodes = implode("','", array_map(fn($c) => strtoupper($c), $codes));
         $branchClause = "UPPER(TRIM(v.base_branch_id)) IN ('{$inCodes}')";
 
+        $ccFilterClause = '';
+        if ($costCenter !== null && $costCenter !== '' && strtoupper(trim($costCenter)) !== 'ALL') {
+            $rawCc = trim($costCenter);
+            $canonicalCc = BudgetService::resolveCanonicalCostCenterName($rawCc);
+            $shortPrefix = str_contains($rawCc, '(') ? trim(explode('(', $rawCc)[0]) : null;
+            $filterItems = array_unique(array_filter([$rawCc, $canonicalCc, $shortPrefix]));
+            $safeItems = implode("','", array_map('addslashes', $filterItems));
+            $ccFilterClause = "AND v.cost_center_name IN ('{$safeItems}')";
+        }
+
         $subqueries = [];
         $params = [];
 
-        $addLeg = function ($glExpr, $amtExpr, $fromClause, $glNotNullExpr) use (&$subqueries, &$params, $branchClause, $budgetYear) {
+        $addLeg = function ($glExpr, $amtExpr, $fromClause, $glNotNullExpr) use (&$subqueries, &$params, $branchClause, $budgetYear, $ccFilterClause) {
             $subqueries[] = "
                 SELECT TRIM({$glExpr}) AS gl_code,
                        md.month AS month_num,
@@ -295,6 +305,7 @@ class DashboardService
                 WHERE {$branchClause}
                   AND v.budget_year = ?
                   AND COALESCE(v.status, '') <> 'CANCELLED'
+                  {$ccFilterClause}
                   AND {$glNotNullExpr} IS NOT NULL
                   AND TRIM({$glNotNullExpr}) <> ''
             ";
@@ -350,9 +361,9 @@ class DashboardService
         return [$sql, $params];
     }
 
-    public static function fetchBranchBudgetByGl(array $branchCodes, int $budgetYear): array
+    public static function fetchBranchBudgetByGl(array $branchCodes, int $budgetYear, ?string $costCenter = null): array
     {
-        [$sql, $params] = self::buildMonthlyBudgetSqlAndParams($branchCodes, $budgetYear);
+        [$sql, $params] = self::buildMonthlyBudgetSqlAndParams($branchCodes, $budgetYear, $costCenter);
         $rows = DB::connection('pgsql')->select($sql, $params);
 
         $byGl = [];
@@ -546,12 +557,12 @@ class DashboardService
         return ['document' => $docMeta, 'by_code' => $byCode, 'by_row_order' => $byRowOrder];
     }
 
-    public static function buildDashboardData(array $branchInfo, int $budgetYear): array
+    public static function buildDashboardData(array $branchInfo, int $budgetYear, ?string $costCenter = null): array
     {
         $targetCodes = $branchInfo['branch_codes'] ?? [$branchInfo['code']];
         $outline = GlActualTemplateRow::orderBy('row_order')->get()->toArray();
         $actualBundle = self::fetchGlActualTemplateForBranch($targetCodes, $budgetYear);
-        $budgetByGl = self::fetchBranchBudgetByGl($targetCodes, $budgetYear);
+        $budgetByGl = self::fetchBranchBudgetByGl($targetCodes, $budgetYear, $costCenter);
 
         $footerOrderByCode = [];
         foreach ($outline as $r) {
@@ -742,6 +753,7 @@ class DashboardService
         return [
             'branch' => $branchInfo,
             'budget_year' => $budgetYear,
+            'cost_center' => $costCenter,
             'gl_actual_document' => $actualBundle['document'],
             'rows' => $outputRows,
         ];

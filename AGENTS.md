@@ -3,7 +3,7 @@
 ## 1. Branch & Deployment Policy
 - **UAT Environment (`c:\E-Budget`)**: Commit and push directly to branch **`uat`**.
 - **Production Environment (`c:\E-Budget_PRD`)**: Commit and push directly to branch **`main`**.
-- **Baseline Snapshot Branch (`backup/django-prd-baseline`)**: Preserved baseline snapshot of the legacy Python Django application for fast emergency rollback if ever needed.
+- **Migration Branch (`migration/laravel13`)**: Dedicated development and verification branch for PHP 8.3 & Laravel 13 migration.
 
 ## 2. Process Cleanup & Dev Server Lifecycle
 - On Windows development environments, `php artisan serve` can leave orphaned background processes bound to port 8000 (or custom port).
@@ -21,5 +21,4 @@
 ## 4. Best Practices & Stability
 - Adhere strictly to clean architecture, performance optimization, and rock-solid stability.
 - Always verify changes end-to-end via automated tests (`php artisan test`) before committing and pushing.
-- Never alter or drop existing PostgreSQL tables in `tlph` (`intra_tl`) or `imedx_tlp` (`public`).
-- Portainer Container Name: `e-budget-web-prd`, Port Mapping: `5895:8000`, Domain: `https://e-budget.thonglorpet.com/`.
+- Never alter or drop existing PostgreSQL tables in `imedx_tlp_for_it` (`intra_tl`) or `imedx_uat` (`public`).

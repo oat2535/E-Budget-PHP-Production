@@ -47,8 +47,9 @@ class BudgetCreateTest extends TestCase
         $response = $this->actingAs($this->getTestUser())->get('/add_gl_entry');
         $response->assertStatus(200);
         $gls = $response->viewData('general_ledgers_json') ?? [];
+        $this->assertNotEmpty($gls);
         foreach ($gls as $gl) {
-            $this->assertFalse(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'Add Expense view data must not contain GL starting with ค่าเสื่อม');
+            $this->assertTrue(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'Add Expense view data must contain only GL starting with ค่าเสื่อม');
         }
     }
 
@@ -232,9 +233,9 @@ class BudgetCreateTest extends TestCase
         $docNo = null;
 
         try {
-            // Pick a non-depreciation GL code
-            $gl = \App\Models\GeneralLedgerMaster::where('gl_name', 'not like', 'ค่าเสื่อม%')->first();
-            $glCode = $gl ? $gl->gl_code : '60100001';
+            // Pick a depreciation GL code
+            $gl = \App\Models\GeneralLedgerMaster::where('gl_name', 'like', 'ค่าเสื่อม%')->first();
+            $glCode = $gl ? $gl->gl_code : '61300004';
 
             $payload = [
                 [

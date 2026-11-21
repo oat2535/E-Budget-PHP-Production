@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CostCenterMaster;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,42 @@ class BudgetRoleService
         ['PM', 'สาขาประดิษฐ์มนูธรรม'],
         ['BN', 'สาขาบางนา'],
         ['HO', 'สำนักงานใหญ่'],
+    ];
+
+    public const BU_COST_CENTER_NAMES = [
+        'Center',
+        'PH (Pet Hospital+Pet Taxi)',
+        'PC (Pet Wellness+Pet Shop+GM+Pet Pool)',
+    ];
+
+    public const DEPT_CODE_TO_COST_CENTER_MAP = [
+        'IT' => ['3003'],        // แผนก IT
+        'HR' => ['3002'],        // แผนกบุคคล
+        'ACC' => ['3001'],       // แผนกบัญชี
+        'FIN' => ['3011'],       // แผนกการเงิน
+        'PUR' => ['3007'],       // แผนกจัดซื้อ
+        'STOCK' => ['3010'],     // แผนกคลังสินค้า
+        'IA' => ['3021'],        // Internal Audit
+        'PD' => ['3012'],        // แผนก Product and Service Development
+        'PSD' => ['3012'],       // แผนก Product and Service Development
+        'BD' => ['3016'],        // แผนก Business Development
+        'BI' => ['3022'],        // แผนก Business Intelligence
+        'BRANDED' => ['3015'],   // แผนก Branded Product
+        'LEGAL' => ['3013'],     // แผนก Legal
+        'MED' => ['3023'],       // แผนก เครื่องมือแพทย์
+        'MKT' => ['3009'],       // แผนกการตลาด
+        'ECOM' => ['3014'],      // แผนก E-Commerce
+        'ECOMMERCE' => ['3014'], // แผนก E-Commerce
+        'VET' => ['3008', '3019'], // แผนกวางแผนและพัฒนาธุรกิจสัตว์แพทย์, แผนกบริหารสัตวแพทย์คลีนิคพิเศษ
+        'QCC' => ['3006'],       // แผนกคุณภาพ
+        'ADMIN' => ['3005'],     // แผนก Admin
+        'MAINT' => ['3004'],     // แผนกซ่อมบำรุง
+        'STRAT' => ['3017'],     // แผนกกลยุทธ์
+        'STRATEGY' => ['3017'],  // แผนกกลยุทธ์
+        'SALE' => ['3018'],      // แผนก Sale and Area
+        'SALES' => ['3018'],     // แผนก Sale and Area
+        'BU_ADMIN' => ['3020'],  // แผนก บริหาร BU
+        'DCXGP' => ['3024'],     // Project DCXGP
     ];
 
     public static function isAdminRole(?string $bankAccountNote): bool
@@ -88,6 +125,7 @@ class BudgetRoleService
             'is_manager' => false,
             'is_admin' => false,
             'bank_account_note' => null,
+            'bank_sub_name' => null,
             'is_executive_view_only' => false,
             'is_district_view_only' => false,
             'is_view_only' => false,
@@ -197,6 +235,7 @@ class BudgetRoleService
                     'is_manager' => $isManager,
                     'is_admin' => $isAdmin,
                     'bank_account_note' => $bankAccountNote,
+                    'bank_sub_name' => $bankSubName,
                     'is_executive_view_only' => $isExecutive,
                     'is_district_view_only' => $isDistrict,
                     'is_view_only' => $isViewOnly,
@@ -210,6 +249,7 @@ class BudgetRoleService
                 'is_manager' => $isManager,
                 'is_admin' => $isAdmin,
                 'bank_account_note' => $bankAccountNote,
+                'bank_sub_name' => $bankSubName,
                 'is_executive_view_only' => $isExecutive,
                 'is_district_view_only' => $isDistrict,
                 'is_view_only' => $isViewOnly,
@@ -226,6 +266,7 @@ class BudgetRoleService
                     'is_manager' => $isManager,
                     'is_admin' => $isAdmin,
                     'bank_account_note' => $bankAccountNote,
+                    'bank_sub_name' => $bankSubName,
                     'is_executive_view_only' => $isExecutive,
                     'is_district_view_only' => $isDistrict,
                     'is_view_only' => $isViewOnly,
@@ -241,6 +282,7 @@ class BudgetRoleService
                 'is_manager' => $isManager,
                 'is_admin' => $isAdmin,
                 'bank_account_note' => $bankAccountNote,
+                'bank_sub_name' => $bankSubName,
                 'is_executive_view_only' => $isExecutive,
                 'is_district_view_only' => $isDistrict,
                 'is_view_only' => $isViewOnly,
@@ -309,8 +351,7 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $session = $request->hasSession() ? $request->session() : null;
-        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_executive_view_only'] ?? false);
     }
 
@@ -322,8 +363,7 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $session = $request->hasSession() ? $request->session() : null;
-        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_district_view_only'] ?? false);
     }
 
@@ -335,8 +375,7 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $session = $request->hasSession() ? $request->session() : null;
-        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_view_only'] ?? false);
     }
 
@@ -355,8 +394,7 @@ class BudgetRoleService
         }
 
         $user = $request->user();
-        $session = $request->hasSession() ? $request->session() : null;
-        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($user->username);
+        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($user->username);
 
         if (self::isPrivilegedUserAccount($user, $request)) {
             return true;
@@ -375,13 +413,11 @@ class BudgetRoleService
 
     public static function getBranchInfo(Request $request): array
     {
-        if ($request->hasSession() && $request->session()->has('branch_info')) {
+        if ($request->session()->has('branch_info')) {
             return $request->session()->get('branch_info');
         }
         $info = self::getBranchInfoFromImedx($request->user()?->username);
-        if ($request->hasSession()) {
-            $request->session()->put('branch_info', $info);
-        }
+        $request->session()->put('branch_info', $info);
         return $info;
     }
 
@@ -517,5 +553,122 @@ class BudgetRoleService
         }
 
         return $currentBranchId;
+    }
+
+    public static function resolveAllowedCostCenters(?User $user, ?string $bankAccountNote = null, ?string $bankSubName = null): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        // 1. Executive & Admins (COO, CFO, CHRO, ADMIN, IT-ADMIN, is_superuser, is_admin) see all cost centers
+        if ($user->is_superuser || $user->is_admin || self::isAdminRole($bankAccountNote) || self::isExecutiveRole($bankAccountNote)) {
+            return CostCenterMaster::orderBy('cost_center_code')->get()->map(function ($c) {
+                return ['code' => $c->cost_center_code, 'name' => $c->cost_center_name];
+            })->toArray();
+        }
+
+        $allMasters = CostCenterMaster::orderBy('cost_center_code')->get();
+        $subUpper = strtoupper(trim((string) $bankSubName));
+
+        // 2. Branch only (no BACK- in bank_sub_name, e.g. R8,R5 or RY or AP,PR) -> show PC, PH, Center
+        if (! str_contains($subUpper, 'BACK')) {
+            return $allMasters->filter(function ($c) {
+                return in_array($c->cost_center_name, self::BU_COST_CENTER_NAMES, true);
+            })->values()->map(function ($c) {
+                return ['code' => $c->cost_center_code, 'name' => $c->cost_center_name];
+            })->toArray();
+        }
+
+        // 3. Back Office (contains BACK-)
+        $rawTokens = array_filter(array_map('trim', explode(',', (string) $bankSubName)));
+        $matchedCodes = [];
+        $includeBu = false;
+
+        $validBranchIds = [];
+        foreach (self::GL_ACTUAL_TEMPLATE_BRANCHES as [$bCode, $bName]) {
+            $validBranchIds[strtoupper($bCode)] = true;
+        }
+
+        foreach ($rawTokens as $rawToken) {
+            $token = strtoupper(trim($rawToken));
+            if (str_starts_with($token, 'BACK-')) {
+                $token = trim(substr($token, strlen('BACK-')));
+            }
+
+            if ($token === '' || $token === 'BACK') {
+                continue;
+            }
+
+            if ($token === 'ALL') {
+                return $allMasters->map(function ($c) {
+                    return ['code' => $c->cost_center_code, 'name' => $c->cost_center_name];
+                })->toArray();
+            }
+
+            if ($token === 'PC' || $token === 'PH' || $token === 'CENTER' || $token === 'BU') {
+                $includeBu = true;
+                continue;
+            }
+
+            // If token is a branch code (e.g. R9, R2, HO) and user also has BACK- office
+            if (isset($validBranchIds[$token])) {
+                $includeBu = true;
+                continue;
+            }
+
+            // Map department token to cost center codes
+            if (isset(self::DEPT_CODE_TO_COST_CENTER_MAP[$token])) {
+                foreach (self::DEPT_CODE_TO_COST_CENTER_MAP[$token] as $ccCode) {
+                    $matchedCodes[$ccCode] = true;
+                }
+            } else {
+                // Fuzzy match against cost center names/descriptions
+                foreach ($allMasters as $m) {
+                    $mNameUpper = strtoupper($m->cost_center_name);
+                    $mDescUpper = strtoupper((string) $m->description);
+                    if (str_contains($mNameUpper, $token) || str_contains($mDescUpper, $token)) {
+                        $matchedCodes[$m->cost_center_code] = true;
+                    }
+                }
+            }
+        }
+
+        if ($includeBu) {
+            foreach ($allMasters as $m) {
+                if (in_array($m->cost_center_name, self::BU_COST_CENTER_NAMES, true)) {
+                    $matchedCodes[$m->cost_center_code] = true;
+                }
+            }
+        }
+
+        if (empty($matchedCodes)) {
+            // Fallback to BU cost centers
+            return $allMasters->filter(function ($c) {
+                return in_array($c->cost_center_name, self::BU_COST_CENTER_NAMES, true);
+            })->values()->map(function ($c) {
+                return ['code' => $c->cost_center_code, 'name' => $c->cost_center_name];
+            })->toArray();
+        }
+
+        return $allMasters->filter(function ($c) use ($matchedCodes) {
+            return isset($matchedCodes[$c->cost_center_code]);
+        })->values()->map(function ($c) {
+            return ['code' => $c->cost_center_code, 'name' => $c->cost_center_name];
+        })->toArray();
+    }
+
+    public static function getAllowedCostCentersForDashboard(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        $info = self::getBranchInfo($request);
+        $bankAccountNote = $info['bank_account_note'] ?? $user->bank_account_note ?? null;
+        $bankSubName = $info['bank_sub_name'] ?? null;
+
+        return self::resolveAllowedCostCenters($user, $bankAccountNote, $bankSubName);
     }
 }

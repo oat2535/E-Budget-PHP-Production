@@ -46,7 +46,7 @@
     <div class="card shadow-sm mb-3">
         <div class="card-body py-3">
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-md-5 col-lg-4">
+                <div class="col-12 col-md-4 col-lg-3">
                     <label for="dashboard-branch-select" class="form-label fw-semibold small mb-1">
                         สาขา (TLPH) <span class="text-danger">*</span>
                         <span class="text-muted fw-normal">
@@ -86,7 +86,23 @@
                     @endif
                 </div>
 
-                <div class="col-6 col-md-3 col-lg-2">
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="dashboard-cost-center-select" class="form-label fw-semibold small mb-1">
+                        Cost Center <span class="text-muted fw-normal">(ศูนย์ต้นทุน)</span>
+                    </label>
+                    <select id="dashboard-cost-center-select" class="form-select">
+                        @if(count($allowed_cost_centers) > 1)
+                            <option value="ALL" {{ ($selected_cost_center ?? '') === 'ALL' || !($selected_cost_center ?? '') ? 'selected' : '' }}>-- ทั้งหมดตามสิทธิ์ --</option>
+                        @endif
+                        @foreach($allowed_cost_centers as $cc)
+                            <option value="{{ $cc['name'] }}" {{ ($selected_cost_center ?? '') === $cc['name'] ? 'selected' : '' }}>
+                                {{ $cc['name'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-4 col-lg-3">
                     <label for="dashboard-year-select" class="form-label fw-semibold small mb-1">ปีงบประมาณ</label>
                     <select id="dashboard-year-select" class="form-select">
                         @foreach($budget_years as $yr)
@@ -95,7 +111,7 @@
                     </select>
                 </div>
 
-                <div class="col-12 col-lg-6">
+                <div class="col-12 col-lg-3">
                     <div id="dashboard-meta-strip" class="d-flex flex-wrap align-items-center gap-1 justify-content-lg-end"></div>
                 </div>
             </div>
@@ -167,6 +183,7 @@
 {
     "selected_branch": "{{ addslashes($selected_branch ?? '') }}",
     "selected_year": {{ $selected_year ?? 0 }},
+    "selected_cost_center": "{{ addslashes($selected_cost_center ?? '') }}",
     "data_api_url": "{{ route('api_dashboard_data') }}",
     "export_api_url": "{{ route('api_dashboard_export') }}"
 }
@@ -175,5 +192,5 @@
 
 @section('extra_js')
 <script src="{{ asset('static/budget_app/vendor/tom-select/tom-select.complete.min.js') }}"></script>
-<script src="{{ asset('static/budget_app/js/dashboard.js') }}?v=20261112_02"></script>
+<script src="{{ asset('static/budget_app/js/dashboard.js') }}?v=20261121_03"></script>
 @endsection

@@ -84,4 +84,14 @@ class FrontendContractsTest extends TestCase
         $response->assertSee('calc-spreadsheet');
         $response->assertSee('save-budget-btn');
     }
+
+    public function test_layouts_app_contains_inactivity_warning_and_test_helpers(): void
+    {
+        $html = file_get_contents(resource_path('views/layouts/app.blade.php'));
+        $this->assertStringContainsString('showInactivityWarningModal', $html);
+        $this->assertStringContainsString('checkIdleTimeout', $html);
+        $this->assertStringContainsString('test_idle', $html);
+        $this->assertStringContainsString('__testIdlePopup', $html);
+        $this->assertStringContainsString('ebudget_last_activity', $html);
+    }
 }

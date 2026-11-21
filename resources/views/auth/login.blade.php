@@ -165,10 +165,12 @@
         </div>
 
         @php
-            $hasAlert = !empty(session('error')) || !empty(session('warning')) || (isset($errors) && $errors->any());
-            $alertType = session('warning') ? 'warning' : 'error';
-            $alertTitle = session('warning') ? 'แจ้งเตือน' : 'เข้าสู่ระบบไม่สำเร็จ';
-            $alertMsg = session('error') ?? session('warning') ?? (isset($errors) ? ($errors->first() ?: '') : '');
+            $warningMsg = session('warning') ?? ($warning ?? null);
+            $errorMsg = session('error') ?? ($error ?? null) ?? (isset($errors) && $errors->any() ? $errors->first() : null);
+            $hasAlert = !empty($warningMsg) || !empty($errorMsg);
+            $alertType = !empty($warningMsg) ? 'warning' : 'error';
+            $alertTitle = !empty($warningMsg) ? 'แจ้งเตือน: เซสชันหมดอายุ' : 'เข้าสู่ระบบไม่สำเร็จ';
+            $alertMsg = $warningMsg ?? $errorMsg ?? '';
         @endphp
         @if($hasAlert)
             <!-- SweetAlert2 loaded on-demand only when alerts are present -->
@@ -178,7 +180,7 @@
                     Swal.fire({
                         icon: '{{ $alertType }}',
                         title: '{{ $alertTitle }}',
-                        html: {!! json_encode($alertMsg) !!},
+                        html: {!! json_encode($alertMsg, JSON_UNESCAPED_UNICODE) !!},
                         confirmButtonColor: '#0076c8',
                         confirmButtonText: 'ตกลง',
                         width: 520

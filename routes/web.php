@@ -9,11 +9,8 @@ use App\Http\Controllers\SystemController;
 use Illuminate\Support\Facades\Route;
 
 // Guest / Authentication routes
-Route::middleware('guest')->group(function () {
-    Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [AuthController::class, 'login']);
-});
-
+Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+Route::post('/login', [AuthController::class, 'login'])->middleware('guest');
 Route::match(['get', 'post'], '/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Authenticated Budget routes
@@ -46,12 +43,12 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Dashboard Routes (Temporarily hidden for Production - uncomment to enable)
+    | Dashboard Routes
     |--------------------------------------------------------------------------
+    */
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('budget_dashboard');
     Route::get('/api/dashboard/data', [DashboardController::class, 'data'])->name('api_dashboard_data');
     Route::get('/api/dashboard/export', [DashboardController::class, 'export'])->name('api_dashboard_export');
-    */
 
     // Budget Document APIs
     Route::get('/api/get_documents/{category_code}', [BudgetDocumentApiController::class, 'getDocuments'])->name('api_get_documents');

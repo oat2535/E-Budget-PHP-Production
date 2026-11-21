@@ -55,4 +55,33 @@ class AuthTest extends TestCase
 
         $response->assertSessionHas('error', 'กรุณากรอก Username และ Password');
     }
+
+    public function test_login_page_with_session_expired_shows_warning(): void
+    {
+        $response = $this->get('/login?session_expired=1');
+        $response->assertStatus(200);
+        $response->assertSee('เซสชันหมดอายุ');
+        $response->assertSee('ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอเกิน 1 ชั่วโมง');
+    }
+
+    public function test_authenticated_user_accessing_login_with_session_expired_is_logged_out(): void
+    {
+        $user = new User(['username' => 'test_officer']);
+        $user->is_superuser = false;
+
+        $response = $this->actingAs($user)->get('/login?session_expired=1');
+        $response->assertStatus(200);
+        $this->assertGuest();
+        $response->assertSee('ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอเกิน 1 ชั่วโมง');
+    }
+
+    public function test_logout_with_session_expired_redirects_to_login_with_query(): void
+    {
+        $user = new User(['username' => 'test_officer']);
+        $user->is_superuser = false;
+
+        $response = $this->actingAs($user)->get('/logout?session_expired=1');
+        $response->assertRedirect(route('login', ['session_expired' => 1]));
+        $this->assertGuest();
+    }
 }

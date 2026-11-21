@@ -998,8 +998,7 @@ class BudgetDocumentApiController extends Controller
         $nameStartswith = $request->query('name_startswith');
 
         $allGls = BudgetService::getGeneralLedgersJson();
-        $excludedGl = ['60300002', '61300004', '61300010'];
-        $expenseGls = BudgetService::getGeneralLedgersJson($excludedGl, null, 'ค่าเสื่อม');
+        $expenseGls = BudgetService::getGeneralLedgersJson(null, 'ค่าเสื่อม');
         $revenueGls = BudgetService::getGeneralLedgersJson(null, 'รายได้');
 
         if ($docType === 'GL Entry' || $docType === 'EXPENSE') {
@@ -1007,7 +1006,7 @@ class BudgetDocumentApiController extends Controller
         } elseif ($docType === 'Revenue') {
             $targetGls = $revenueGls;
         } elseif ($nameStartswith !== null && $nameStartswith !== '') {
-            $targetGls = BudgetService::getGeneralLedgersJson($excludedGl, $nameStartswith);
+            $targetGls = BudgetService::getGeneralLedgersJson(null, $nameStartswith);
         } else {
             $targetGls = $expenseGls;
         }

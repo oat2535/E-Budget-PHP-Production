@@ -62,7 +62,7 @@ flowchart TD
 9. **งานต่อเติมและปรับปรุงสถานที่ (Renovation)**
 10. **ระบบซอฟต์แวร์ (Software)**
 11. **ค่าใช้จ่ายดำเนินงาน (Operating Expense / GL Entry):**
-    - มีระบบกรองบัญชีค่าเสื่อมราคา (`gl_name NOT LIKE 'ค่าเสื่อม%'`) อัตโนมัติทั้งในหน้าสร้างงบและหน้าแก้ไขเอกสาร
+    - กรองแสดงเฉพาะบัญชีหมวดค่าเสื่อมราคา (`gl_name LIKE 'ค่าเสื่อม%'`) ทั้งในหน้าสร้างงบประมาณ (Add Budget) และหน้าแก้ไขเอกสาร (Edit Document Modal)
 12. **ประมาณการรายได้ (Revenue Budget):** กรองเฉพาะหมวดบัญชีรายได้
 13. **แผนงบประมาณโครงการ (Budget Plan / C03)**
 14. **เทมเพลต GL Actual ประจำปี (GL Actual Template)**
@@ -70,6 +70,12 @@ flowchart TD
 ### 2.2 แดชบอร์ดวิเคราะห์งบการเงิน Real-time (P&L & Analytics Dashboard)
 - แสดงผลสรุปรายได้, ต้นทุน, ค่าใช้จ่ายดำเนินงาน, และกำไรจากการดำเนินงาน (Operating Profit)
 - รองรับการกรองดูข้อมูลเป็นรายสาขา หรือแสดงผลรวมทุกสาขาในกลุ่ม TLPH ทั้งหมด
+- **ระบบตัวเลือก Cost Center ตามสิทธิ์ `emp.bank_sub_name`:**
+  - วางเคียงข้างตัวเลือกสาขา เพื่อวิเคราะห์ P&L รายศูนย์ต้นทุน
+  - **COO, CFO, CHRO, ADMIN:** มองเห็นทุก Cost Center ทั้งหมด
+  - **ผู้ใช้งานประจำสาขา (เช่น `R8,R5`):** แสดงเฉพาะศูนย์ต้นทุน BU ของสาขา (`PC`, `PH`, `Center`)
+  - **Back Office ดูแลสาขา (`BACK-PC,R9,R2,R8`):** แสดงกลุ่มศูนย์ต้นทุนสาขา (`PC`, `PH`, `Center`)
+  - **Back Office ประจำแผนก (เช่น `BACK-IT`):** กรองแสดงเฉพาะ Cost Center ของแผนกตนเอง (เช่น `แผนก IT`)
 - ระบบส่งออกรายงานเป็นไฟล์ **Excel (.xlsx)** แบบ Multi-sheet อัตโนมัติด้วยโครงสร้าง Zip Archive ความเร็วสูง
 
 ### 2.3 ระบบยืนยันตัวตนแบบคู่ขนาน (Dual Authentication Engine)
@@ -143,8 +149,8 @@ flowchart TD
 ### 5.2 ขั้นตอนการติดตั้ง
 1. Clone Repository:
    ```bash
-   git clone https://github.com/oat2535/E-Budget-PHP-Production.git
-   cd E-Budget-PHP-Production
+   git clone https://github.com/oat2535/E-Budget-PHP.git
+   cd E-Budget-PHP
    ```
 2. คัดลอกไฟล์ Environment และตั้งค่าฐานข้อมูล:
    ```bash
@@ -201,6 +207,7 @@ flowchart TD
 - **Reverse Proxy SSL Trust:** คอนฟิก `TRUSTED_PROXIES="*"` รองรับการรับ Header `X-Forwarded-Proto: https` จาก Reverse Proxy ป้องกันปัญหา Mixed Content และ Cookie Leakage
 - **SQL Injection & XSS Prevention:** ใช้ Eloquent ORM และ Parameterized Query ทั้งหมด พร้อม Blade CSRF Protection (`@csrf`, `X-CSRF-TOKEN`)
 - **Audit Logging:** บันทึกผู้สร้างเอกสาร (`create_eid`) และผู้แก้ไขล่าสุด (`modify_eid`) ในทุก Transaction
+- **Inactivity Timeout & Auto-Logout:** เซสชัน 1 ชั่วโมง พร้อมระบบแจ้งเตือน SweetAlert ล่วงหน้า 2 นาที (นาทีที่ 58) และ Auto-Logout อัตโนมัติเมื่อครบ 60 นาที หรือเมื่อเปิดจอทิ้งไว้นานกว่า 1 ชั่วโมง โดยนำทางไปยังหน้า Login พร้อมแสดงหน้าต่างแจ้งเตือนเซสชันหมดอายุทันที ป้องกันข้อมูลค้างเติ่ง รองรับการทดสอบด่วนด้วย `?test_idle=10` หรือ `window.__testIdlePopup()` ในเบราว์เซอร์
 
 ---
 

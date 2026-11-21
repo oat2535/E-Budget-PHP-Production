@@ -55,15 +55,16 @@ class BudgetDocumentApiTest extends TestCase
         $response->assertJson(['status' => 'success']);
 
         $data = $response->json('data') ?? [];
+        $this->assertNotEmpty($data);
         foreach ($data as $gl) {
-            $this->assertFalse(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'Expense GL list must not contain depreciation items starting with ค่าเสื่อม');
+            $this->assertTrue(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'Expense GL list must contain only depreciation items starting with ค่าเสื่อม');
         }
 
         $byDocType = $response->json('by_doc_type') ?? [];
         $this->assertArrayHasKey('GL Entry', $byDocType);
         $this->assertArrayHasKey('EXPENSE', $byDocType);
         foreach ($byDocType['GL Entry'] as $gl) {
-            $this->assertFalse(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'by_doc_type GL Entry must not contain depreciation items');
+            $this->assertTrue(str_starts_with($gl['gl_name'] ?? '', 'ค่าเสื่อม'), 'by_doc_type GL Entry must contain only depreciation items');
         }
     }
 

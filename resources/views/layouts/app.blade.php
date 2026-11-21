@@ -158,14 +158,12 @@
         <!-- Sidenav Menu Heading (Core)-->
         <div class="sidenav-menu-heading">E-Budget</div>
 
-        {{-- Dashboard (Temporarily hidden for Production - uncomment when ready to enable)
-        @if(!empty($can_access_dashboard) && \Illuminate\Support\Facades\Route::has('budget_dashboard'))
+        @if($can_access_dashboard)
         <a class="nav-link {{ request()->routeIs('budget_dashboard') ? 'active' : '' }}" href="{{ route('budget_dashboard') }}">
             <div class="nav-link-icon"><i data-feather="bar-chart-2"></i></div>
             Dashboard
         </a>
         @endif
-        --}}
         
         <a class="nav-link {{ request()->routeIs('budget_list') ? 'active' : '' }}" href="{{ route('budget_list') }}">
             <div class="nav-link-icon"><i data-feather="list"></i></div>
@@ -336,32 +334,59 @@
             }
 
             // Inactivity timeout & Idle warning popup:
-            // Detect user activity (mousemove, mousedown, keydown, scroll, touchstart, click).
-            // If there is no activity for 1 hour (3600 seconds), display a friendly warning popup
-            // with a 1-minute (60 seconds) countdown and a "อยู่ในระบบต่อ" (Stay in system) button.
-            // If the user clicks "อยู่ในระบบต่อ", reset timer and keep session alive.
-            // If the countdown reaches 0 or user doesn't respond, automatically log out.
+            // Detect deliberate user activity (mousemove > 10px, mousedown, keydown, scroll, touchstart, click).
+            // Default timeout: 1 hour (3600 seconds = 60 minutes) or body[data-idle-timeout-seconds].
+            // Advance warning: 2 minutes (120 seconds) before timeout (i.e. at 58 minutes of inactivity).
+            // Quick test support: appending ?test_idle=10 (or window.__testIdlePopup()) allows instant verification.
+            // When inactivity reaches 58 minutes, display a warning modal with a live countdown.
+            // If the user clicks "อยู่ในระบบต่อ", timer resets, keepalive ping is sent, and toast appears.
+            // If countdown reaches 0 or user clicks "ออกจากระบบทันที", user is logged out and redirected to /login?session_expired=1.
+            // If the user was away from PC (e.g. computer asleep/locked) and returns after >= 60 minutes,
+            // immediately redirect to /login?session_expired=1 which displays the session expired alert.
             (function() {
                 if (document.body.dataset.authenticated !== 'true') return;
 
-                const IDLE_TIMEOUT_SECONDS = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 3600;
-                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000; // 1 hour (3600000 ms)
-                const COUNTDOWN_SECONDS = 60; // 1 minute countdown
-                const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // Heartbeat every 10 min of active use
-                const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+                const urlParams = new URLSearchParams(window.location.search);
+                const testIdleSec = parseInt(urlParams.get('test_idle'), 10);
+                const configuredTimeoutSec = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 3600;
+                const IDLE_TIMEOUT_SECONDS = (testIdleSec > 0) ? testIdleSec : configuredTimeoutSec;
+                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
+
+                // Advance warning before timeout (120s for standard 1hr timeout, or proportional for quick tests)
+                const WARNING_BEFORE_SECONDS = (IDLE_TIMEOUT_SECONDS <= 30)
+                    ? Math.max(3, Math.floor(IDLE_TIMEOUT_SECONDS / 2))
+                    : Math.min(120, Math.floor(IDLE_TIMEOUT_SECONDS * 0.1));
+                const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // Heartbeat ping every 10 min during active usage
 
                 let lastActivityTime = Date.now();
                 let lastHeartbeatTime = Date.now();
                 let warningPopupActive = false;
                 let activityThrottled = false;
                 let countdownTimer = null;
+                let lastMouseX = null;
+                let lastMouseY = null;
+
+                // Sync lastActivityTime from localStorage if available
+                try {
+                    const stored = localStorage.getItem('ebudget_last_activity');
+                    if (stored) {
+                        const parsed = parseInt(stored, 10);
+                        if (!isNaN(parsed) && parsed > 0 && (Date.now() - parsed) < IDLE_TIMEOUT_MS) {
+                            lastActivityTime = parsed;
+                        }
+                    }
+                    localStorage.setItem('ebudget_last_activity', String(lastActivityTime));
+                } catch (_) {}
 
                 function performAutoLogout() {
-                    const form = document.getElementById('logoutForm');
-                    if (form) {
-                        form.submit();
-                    } else {
-                        window.location.href = '{{ route("logout") }}';
+                    if (countdownTimer) {
+                        clearInterval(countdownTimer);
+                        countdownTimer = null;
+                    }
+                    try { localStorage.removeItem('ebudget_last_activity'); } catch (_) {}
+                    const targetUrl = '{{ route("logout") }}?session_expired=1';
+                    if (!window.location.pathname.includes('/login')) {
+                        window.location.replace(targetUrl);
                     }
                 }
 
@@ -370,15 +395,15 @@
                     warningPopupActive = true;
 
                     let remainingSeconds = (typeof initialSeconds === 'number' && initialSeconds > 0)
-                        ? initialSeconds
-                        : COUNTDOWN_SECONDS;
+                        ? Math.round(initialSeconds)
+                        : WARNING_BEFORE_SECONDS;
 
                     Swal.fire({
                         icon: 'warning',
                         title: 'แจ้งเตือน: ไม่มีการใช้งานระบบ',
                         html: `
                             <div style="font-size: 15px; line-height: 1.6; color: #374151; margin-bottom: 12px;">
-                                ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอเกิน <strong>1 ชั่วโมง</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:
+                                ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอมาเป็นเวลาเกือบ <strong>1 ชั่วโมง</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:
                             </div>
                             <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px; margin: 12px 0;">
                                 <span id="idle-countdown-display" style="font-size: 2.2rem; font-weight: 700; color: #dc2626; font-family: monospace;">${remainingSeconds}</span>
@@ -406,6 +431,7 @@
                                     clearInterval(countdownTimer);
                                     countdownTimer = null;
                                     Swal.close();
+                                    warningPopupActive = false;
                                     performAutoLogout();
                                 }
                             }, 1000);
@@ -425,6 +451,7 @@
                         if (result.isConfirmed) {
                             // User clicked "อยู่ในระบบต่อ"
                             lastActivityTime = Date.now();
+                            try { localStorage.setItem('ebudget_last_activity', String(lastActivityTime)); } catch (_) {}
                             warningPopupActive = false;
                             sendKeepalivePing();
 
@@ -438,31 +465,43 @@
                             });
                         } else if (result.dismiss === Swal.DismissReason.cancel) {
                             // User clicked "ออกจากระบบทันที"
+                            warningPopupActive = false;
                             performAutoLogout();
                         }
                     });
                 }
 
                 function checkIdleTimeout() {
-                    if (warningPopupActive) return;
-                    const idleTime = Date.now() - lastActivityTime;
-                    const gracePeriodMs = COUNTDOWN_SECONDS * 1000;
+                    const now = Date.now();
+                    const idleTimeMs = now - lastActivityTime;
+                    const idleTimeSec = Math.floor(idleTimeMs / 1000);
 
-                    if (idleTime >= IDLE_TIMEOUT_MS + gracePeriodMs) {
-                        // User has been away longer than 1 hour + 1 minute grace period (e.g. computer was asleep/locked)
+                    if (idleTimeSec >= IDLE_TIMEOUT_SECONDS) {
+                        // User has been idle for >= 1 hour (or PC woke up after being asleep)
+                        if (warningPopupActive) {
+                            clearInterval(countdownTimer);
+                            countdownTimer = null;
+                            Swal.close();
+                            warningPopupActive = false;
+                        }
                         performAutoLogout();
-                    } else if (idleTime >= IDLE_TIMEOUT_MS) {
-                        // 1 hour reached; calculate remaining seconds in the 1-minute window
-                        const remainingSec = Math.max(1, Math.round((IDLE_TIMEOUT_MS + gracePeriodMs - idleTime) / 1000));
-                        showInactivityWarningModal(remainingSec);
+                    } else if (idleTimeSec >= (IDLE_TIMEOUT_SECONDS - WARNING_BEFORE_SECONDS)) {
+                        // In the warning countdown window (e.g. 58m to 60m)
+                        if (!warningPopupActive) {
+                            const remainingSec = Math.max(1, IDLE_TIMEOUT_SECONDS - idleTimeSec);
+                            showInactivityWarningModal(remainingSec);
+                        }
                     }
                 }
 
                 function sendKeepalivePing() {
                     lastHeartbeatTime = Date.now();
-                    fetch('/api/session/keepalive/', {
+                    fetch('{{ route("api_session_keepalive") }}', {
                         method: 'GET',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        }
                     }).then(res => {
                         if (res.status === 401 || (res.redirected && res.url && res.url.includes('/login'))) {
                             performAutoLogout();
@@ -475,6 +514,7 @@
                     if (warningPopupActive) return;
 
                     lastActivityTime = Date.now();
+                    try { localStorage.setItem('ebudget_last_activity', String(lastActivityTime)); } catch (_) {}
 
                     if (activityThrottled) return;
                     activityThrottled = true;
@@ -485,12 +525,48 @@
                     }
                 }
 
-                ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, onUserActivity, { passive: true }));
+                function onMouseMove(e) {
+                    if (lastMouseX === null || lastMouseY === null) {
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                        return;
+                    }
+                    const dx = Math.abs(e.clientX - lastMouseX);
+                    const dy = Math.abs(e.clientY - lastMouseY);
+                    // Filter out micro-movements / mouse sensor jitter (< 10px)
+                    if (dx >= 10 || dy >= 10) {
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                        onUserActivity();
+                    }
+                }
+
+                // Attach event listeners
+                window.addEventListener('mousemove', onMouseMove, { passive: true });
+                ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+                    window.addEventListener(evt, onUserActivity, { passive: true });
+                });
+
+                // Listen for activity from other open tabs
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'ebudget_last_activity' && e.newValue) {
+                        const remoteTime = parseInt(e.newValue, 10);
+                        if (!isNaN(remoteTime) && remoteTime > lastActivityTime) {
+                            lastActivityTime = remoteTime;
+                        }
+                    }
+                });
+
                 setInterval(checkIdleTimeout, 1000);
                 document.addEventListener('visibilitychange', () => {
                     if (!document.hidden) checkIdleTimeout();
                 });
                 window.addEventListener('focus', checkIdleTimeout);
+
+                // Expose debug tester for development and verification
+                window.__testIdlePopup = function(remainingSec = 30) {
+                    showInactivityWarningModal(remainingSec);
+                };
             })();
 
             @if(session('info') || session('status') || session('notice'))
