@@ -3,10 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class DashboardTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (! Route::has('budget_dashboard')) {
+            $this->markTestSkipped('Dashboard feature is temporarily hidden/commented for Production.');
+        }
+    }
     protected function getAdminUser(): User
     {
         $user = new User(['username' => 'admin']);
