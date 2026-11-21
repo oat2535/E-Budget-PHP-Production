@@ -1,0 +1,683 @@
+@extends('layouts.app')
+
+
+@section('title', 'Add Budget - NON VET Manpower')
+
+@section('extra_css')
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jexcel/jexcel.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jsuites/jsuites.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/tom-select/tom-select.bootstrap5.min.css') }}">
+<style>
+    .jexcel_container {
+        width: 100%;
+        max-width: 100%;
+    }
+    .jexcel_content {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .jexcel {
+        width: 100% !important;
+    }
+    .card-body {
+        overflow: hidden;
+    }
+    /* The blanket rule above contains the jspreadsheet grid, but it also
+       clips the Cost Center / branch dropdowns' floating option lists
+       (absolutely positioned children that need to escape their card to
+       render fully). */
+    #cost-center-card-body {
+        overflow: visible;
+    }
+    .jexcel tbody tr td {
+        vertical-align: middle;
+    }
+    /* Text/dropdown columns are set to align:'left' on their column
+       definition (see budget_list.js / this page's inline <script>) so
+       their cell content reads left-aligned — but jexcel ties a column's
+       header alignment to the same `align` property, so without this the
+       header text would also shift left. jexcel sets header alignment as
+       a plain (non-!important) inline style, so this cheaply overrides it
+       back to centered without touching the data cells below. */
+    .jexcel > thead > tr > td {
+        text-align: center !important;
+    }
+</style>
+@endsection
+
+@section('content')
+<header class="page-header page-header-dark bg-gradient-primary-to-secondary pb-10">
+    <div class="container-fluid px-4">
+        <div class="page-header-content pt-4">
+            <div class="row align-items-center justify-content-between">
+                <div class="col-auto mt-4">
+                    <h1 class="page-header-title">
+                        <div class="page-header-icon"><i data-feather="plus-circle"></i></div>
+                        NON VET Manpower
+                    </h1>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="container-fluid px-4 mt-n10">
+    <div class="card mb-4 shadow-sm border-0 card-soft eb-cost-center-card">
+        <div class="card-body" id="cost-center-card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="cost-center-select" class="form-label fw-500">Cost Center <span class="text-danger">*</span></label>
+                    <select id="cost-center-select" class="form-select" placeholder="-- เลือก Cost Center --"></select>
+                </div>
+                @if($needs_branch_selection)
+                <div class="col-md-6">
+                    <label for="branch-select" class="form-label fw-500">สาขา <span class="text-danger">*</span></label>
+                    <select id="branch-select" class="form-select" placeholder="-- เลือกสาขา --"></select>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0 card-soft">
+        <div class="card-header d-flex justify-content-between align-items-center bg-white py-3 eb-sticky-header">
+            <h6 class="m-0 font-weight-bold text-primary">ตารางส่วนแรก (กรอกจำนวนคน)</h6>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{{ route('budget_list') }}" class="btn btn-sm btn-outline-secondary shadow-xs fw-500" style="min-width: 90px;"><i data-feather="arrow-left" class="me-1"></i> กลับ</a>
+                <button id="add-row-btn" class="btn btn-sm btn-primary shadow-xs fw-500"><i data-feather="plus" class="me-1"></i> เพิ่มรายการ</button>
+                <button id="save-budget-btn" class="btn btn-sm btn-success shadow-xs fw-500" style="min-width: 95px;"><i data-feather="save" class="me-1"></i> บันทึก</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="spreadsheet"></div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0 card-soft">
+        <div class="card-header bg-white py-3">
+            <h6 class="m-0 font-weight-bold text-success">ตารางส่วนที่สอง (คำนวณงบประมาณ)</h6>
+        </div>
+        <div class="card-body">
+            <div id="calc-spreadsheet"></div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@section('extra_js')
+<script src="{{ asset('static/budget_app/vendor/jexcel/jexcel.js') }}"></script>
+<script src="{{ asset('static/budget_app/vendor/jsuites/jsuites.js') }}"></script>
+<script defer src="{{ asset('static/budget_app/vendor/tom-select/tom-select.complete.min.js') }}"></script>
+
+<script id="items-data" type="application/json">{!! json_encode($items_json ?? []) !!}</script>
+<script id="cost-centers-data" type="application/json">{!! json_encode($cost_centers_json ?? []) !!}</script>
+<script id="branch-options-data" type="application/json">{!! json_encode($branch_options_json ?? []) !!}</script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const items = JSON.parse(document.getElementById('items-data').textContent);
+
+        // Preserves master item order (id ASC) loaded from the database
+        const itemNames = items.map(i => i.name);
+
+        const getSalary = (name) => {
+            const match = items.find(i => i.name === name);
+            return match ? match.salary : 0;
+        };
+        const getAllowance = (name) => {
+            const match = items.find(i => i.name === name);
+            return match ? match.position_allowance : 0;
+        };
+
+        // Datalist for NON VET position suggestions: allows free static text while
+        // still presenting autocomplete suggestions from item master.
+        const nonVetDatalist = document.createElement('datalist');
+        nonVetDatalist.id = 'non-vet-position-datalist';
+        itemNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            nonVetDatalist.appendChild(opt);
+        });
+        document.body.appendChild(nonVetDatalist);
+
+        const nonVetEditor = {
+            createCell: function(cell) {
+                cell.classList.add('eb-dropdown-cell');
+                return cell;
+            },
+            updateCell: function(cell, value, force) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+                return value;
+            },
+            setValue: function(cell, value) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+            },
+            openEditor: function(cell, el, empty, def) {
+                const rect = cell.getBoundingClientRect();
+                const input = document.createElement('input');
+                input.setAttribute('list', 'non-vet-position-datalist');
+                input.className = 'jexcel_editor eb-dropdown-input';
+                input.style.width = rect.width + 'px';
+                input.style.height = (rect.height - 2) + 'px';
+                input.style.minHeight = (rect.height - 2) + 'px';
+                input.style.boxSizing = 'border-box';
+                input.style.border = 'none';
+                input.style.outline = 'none';
+                input.style.padding = '0 4px';
+                input.style.font = 'inherit';
+
+                const currentValue = cell.innerText || '';
+                input.value = empty ? '' : currentValue;
+
+                cell.classList.add('editor');
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+
+                try {
+                    if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                    }
+                } catch (e) {}
+
+                input.onkeydown = function(e) {
+                    if (e.which === 13) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, true);
+                        setTimeout(syncTableRows, 0);
+                    } else if (e.which === 27) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, false);
+                    }
+                };
+
+                input.onblur = function() {
+                    if (table1 && table1.edition) table1.closeEditor(cell, true);
+                };
+            },
+            closeEditor: function(cell, save) {
+                const input = cell.querySelector('input');
+                return input ? input.value.trim() : (cell.innerText || '').trim();
+            }
+        };
+
+        // Cost center select: chosen once for the whole document, stamped
+        // onto every row on save (not a per-row jspreadsheet column).
+        const costCenters = JSON.parse(document.getElementById('cost-centers-data').textContent);
+        const costCenterSelect = document.getElementById('cost-center-select');
+        new TomSelect(costCenterSelect, {
+            options: costCenters.map(cc => ({ value: cc.cost_center_name, text: `${cc.cost_center_code}: ${cc.cost_center_name}` })),
+            valueField: 'value',
+            labelField: 'text',
+            searchField: ['text', 'value'],
+            create: false,
+            placeholder: '-- เลือก Cost Center --',
+        });
+
+        // Branch select: only present when the user belongs to more than
+        // one branch (see get_branch_selection_context in views.py) —
+        // stamped onto the document the same way cost center is.
+        const branchSelectEl = document.getElementById('branch-select');
+        if (branchSelectEl) {
+            const branchOptions = JSON.parse(document.getElementById('branch-options-data').textContent);
+            new TomSelect(branchSelectEl, {
+                options: branchOptions.map(b => ({ value: b.code, text: `${b.code} - ${b.name}` })),
+                valueField: 'value',
+                labelField: 'text',
+                searchField: ['text', 'value'],
+                create: false,
+                placeholder: '-- เลือกสาขา --',
+            });
+        }
+
+        // Columns definition
+        const columns = [
+            { type: 'text', align: 'left', title: 'ตำแหน่ง', width: 200, editor: nonVetEditor },
+            // For a position typed in free-hand (not in master data) —
+            // mirrors VET's own รายละเอียด column (budget_add.html).
+            { type: 'text', align: 'left', title: 'รายละเอียด', width: 200 },
+            { type: 'numeric', title: 'เงินเดือน', width: 100, mask: '#,##0' },
+            { type: 'numeric', title: 'ค่าวัดระดับ/ตำแหน่ง', width: 150, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 85 },
+            { type: 'numeric', title: 'Feb', width: 85 },
+            { type: 'numeric', title: 'Mar', width: 85 },
+            { type: 'numeric', title: 'Apr', width: 85 },
+            { type: 'numeric', title: 'May', width: 85 },
+            { type: 'numeric', title: 'Jun', width: 85 },
+            { type: 'numeric', title: 'Jul', width: 85 },
+            { type: 'numeric', title: 'Aug', width: 85 },
+            { type: 'numeric', title: 'Sep', width: 85 },
+            { type: 'numeric', title: 'Oct', width: 85 },
+            { type: 'numeric', title: 'Nov', width: 85 },
+            { type: 'numeric', title: 'Dec', width: 85 },
+            { type: 'numeric', title: 'รวม', width: 100, readOnly: true, mask: '#,##0' }
+        ];
+
+        const calcColumns = [
+            { type: 'text', align: 'left', title: 'ตำแหน่ง', width: 150, readOnly: true },
+            { type: 'text', align: 'left', title: 'รายละเอียด', width: 200, readOnly: true },
+            { type: 'numeric', title: 'เงินเดือน', width: 100, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'ค่าวัดระดับ/ตำแหน่ง', width: 150, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Feb', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Mar', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Apr', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'May', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jun', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jul', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Aug', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Sep', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Oct', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Nov', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Dec', width: 85, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'รวม', width: 100, readOnly: true, mask: '#,##0' }
+        ];
+
+        let table1, table2;
+        let isUpdating = false;
+
+        const syncTableRows = function() {
+            if (!table1 || !table2) return;
+            const count1 = (table1.rows && table1.rows.length) || 0;
+            while (table2.rows.length < count1) {
+                table2.insertRow();
+            }
+            while (table2.rows.length > count1 && table2.rows.length > 1) {
+                table2.deleteRow(table2.rows.length - 1);
+            }
+        };
+
+        const getNum = (val) => parseFloat(String(val).replace(/,/g, '')) || 0;
+
+        // Carry-forward budget: every month's cost is the running headcount total
+        // (all entries so far this year) times rate, not just that month's own
+        // entry — headcount continues costing money in every month after it's
+        // hired, including the month it was hired in.
+        const computeMonthlyBudget = (monthCounts, rate) => {
+            let cumulative = 0;
+            return monthCounts.map((count) => {
+                cumulative += count;
+                return { count, cost: cumulative * rate };
+            });
+        };
+
+        const onchange = function(instance, cell, x, y, value) {
+            if (!table1 || !table2 || isUpdating) return;
+            isUpdating = true;
+
+            try {
+                x = parseInt(x);
+                y = parseInt(y);
+
+                // table1's row count can only get ahead of table2's through the
+                // oninsertrow hook below, which keeps them synced regardless of
+                // how the row was added — but guard here too in case a future
+                // jspreadsheet interaction (e.g. paste) still slips a row past it.
+                if (y >= table2.rows.length) {
+                    syncTableRows();
+                    if (y >= table2.rows.length) return;
+                }
+
+                // If position changed, update salary
+                if (x === 0) {
+                    const trimmedVal = (value || '').trim();
+                    if (trimmedVal !== '') {
+                        const match = items.find(i => i.name === trimmedVal);
+                        if (match) {
+                            table1.setValueFromCoords(2, y, match.salary, true);
+                            table1.setValueFromCoords(3, y, match.position_allowance || 0, true);
+                        } else {
+                            table1.setValueFromCoords(0, y, '', true);
+                            table1.setValueFromCoords(2, y, 0, true);
+                            table1.setValueFromCoords(3, y, 0, true);
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งจากรายการ Dropdown เท่านั้น ("${trimmedVal}" ไม่มีอยู่ในรายการตัวเลือก)`,
+                                timer: 3000,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                        }
+                    } else {
+                        table1.setValueFromCoords(2, y, 0, true);
+                        table1.setValueFromCoords(3, y, 0, true);
+                    }
+                }
+
+                // Enforce integer จำนวนคน (digits only) without leading zeros in month columns (x = 4 to 15)
+                if (x >= 4 && x <= 15) {
+                    const rawVal = String(value !== null && value !== undefined ? value : '').trim();
+                    if (rawVal !== '') {
+                        const cleanStr = rawVal.replace(/,/g, '');
+                        const cleanDigits = cleanStr.replace(/[^0-9]/g, '');
+                        const hasNonDigits = cleanStr !== cleanDigits;
+                        const hasLeadingZero = /^0\d+/.test(cleanDigits);
+                        const num = parseFloat(cleanStr);
+                        const isDecimal = !isNaN(num) && !Number.isInteger(num);
+
+                        if (hasNonDigits || hasLeadingZero || isDecimal) {
+                            const finalDigits = cleanDigits.replace(/^0+(?=\d)/, '');
+                            const intVal = finalDigits !== '' ? parseInt(finalDigits, 10) : 0;
+                            table1.setValueFromCoords(x, y, intVal, false);
+                            let warnMsg = 'จำนวนคนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกตัวอักษรหรืออักขระพิเศษ';
+                            if (hasLeadingZero && !hasNonDigits && !isDecimal) {
+                                warnMsg = 'ไม่อนุญาตให้กรอกตัวเลขที่มี 0 นำหน้า (เช่น 03, 04) ระบบปรับเป็น ' + intVal + ' ให้เรียบร้อยแล้ว';
+                            } else if (isDecimal && !hasNonDigits && !hasLeadingZero) {
+                                warnMsg = 'จำนวนคนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม';
+                            }
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: warnMsg,
+                                timer: 2500,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                        }
+                    }
+                }
+
+                // Calculate total for this row in table1
+                const rowData1 = table1.getRowData(y);
+                let sum1 = 0;
+                for(let i = 4; i <= 15; i++) {
+                    sum1 += getNum(rowData1[i]);
+                }
+                table1.setValueFromCoords(16, y, sum1, true);
+
+                // Sync with table2
+                const pos = rowData1[0];
+                const detail = rowData1[1];
+                const sal = getNum(rowData1[2]);
+                const allow = getNum(rowData1[3]);
+                const total_sal = sal + allow;
+
+                // Set position, detail, salary, and allowance in table 2
+                table2.setValueFromCoords(0, y, pos, true);
+                table2.setValueFromCoords(1, y, detail, true);
+                table2.setValueFromCoords(2, y, sal, true);
+                table2.setValueFromCoords(3, y, allow, true);
+
+                const monthCounts = [];
+                for (let i = 4; i <= 15; i++) {
+                    monthCounts.push(getNum(rowData1[i]));
+                }
+                const monthlyBudget = computeMonthlyBudget(monthCounts, total_sal);
+
+                let sum2 = 0;
+                monthlyBudget.forEach((m, idx) => {
+                    table2.setValueFromCoords(idx + 4, y, m.cost, true);
+                    sum2 += m.cost;
+                });
+                table2.setValueFromCoords(16, y, sum2, true);
+            } finally {
+                // Always clear the guard, even if something above throws —
+                // otherwise every future edit silently no-ops forever (the bug
+                // behind "table freezes until you refresh the page").
+                isUpdating = false;
+            }
+        };
+
+        const createInitialData = () => [['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']];
+
+        table1 = jspreadsheet(document.getElementById('spreadsheet'), {
+            data: createInitialData(),
+            columns: columns,
+            minDimensions: [17, 1],
+            onchange: onchange,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            // table1 can gain a row through more than just the "เพิ่มรายการ"
+            // button — e.g. pressing Enter on its last row — and table2 must
+            // always mirror it row-for-row or onchange's cross-table writes
+            // land on a row that doesn't exist yet and throw. Handling every
+            // insertion here (rather than only in the button's click handler)
+            // is what keeps the two tables in sync regardless of how the row
+            // was added.
+            oninsertrow: function(el, rowNumber, numOfRows, rowRecords, insertBefore) {
+                if (table2) table2.insertRow(numOfRows, rowNumber, insertBefore);
+                syncTableRows();
+            },
+            ondeleterow: function(el, rowNumber, numOfRows) {
+                if (table2) table2.deleteRow(rowNumber, numOfRows);
+                syncTableRows();
+            },
+            onselection: function(el, x1, y1, x2, y2, origin) {
+                const sheet = (el && el.jexcel) || table1;
+                if (!sheet || typeof sheet.getCellFromCoords !== 'function') return;
+                if (x1 === 0 && x2 === 0 && y1 === y2) {
+                    const cell = sheet.getCellFromCoords(0, y1);
+                    if (cell && !sheet.edition) {
+                        sheet.openEditor(cell, false);
+                    }
+                }
+            },
+            freezeColumns: 4,
+        });
+
+        table2 = jspreadsheet(document.getElementById('calc-spreadsheet'), {
+            data: createInitialData(),
+            columns: calcColumns,
+            minDimensions: [17, 1],
+            allowInsertRow: true,
+            allowDeleteRow: true,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            contextMenu: function() { return false; },
+            freezeColumns: 4,
+        });
+        
+        // Bind add row button — table1's oninsertrow hook mirrors this into
+        // table2, so it isn't done here too (that would double-insert).
+        document.getElementById('add-row-btn').addEventListener('click', function() {
+            table1.insertRow();
+        });
+
+        // Ensure table2 synchronizes whenever Enter is pressed to create a new row
+        // And block decimal point (.) and minus (-) in month headcount columns (Jan - Dec: x = 4 to 15)
+        const spreadsheetEl = document.getElementById('spreadsheet');
+        spreadsheetEl.addEventListener('keydown', function(e) {
+            if (e.which === 13) {
+                setTimeout(syncTableRows, 0);
+            }
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                if (x >= 4 && x <= 15) {
+                    if (e.ctrlKey || e.metaKey || e.altKey) return;
+                    const allowedControlKeys = ['Backspace', 'Tab', 'Enter', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+                    if (allowedControlKeys.includes(e.key)) return;
+                    if (!/^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                    }
+                }
+            }
+        }, true);
+
+        spreadsheetEl.addEventListener('input', function(e) {
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                if (x >= 4 && x <= 15 && e.target && (e.target.tagName === 'INPUT' || e.target.classList.contains('jexcel_editor'))) {
+                    if (e.target.value) {
+                        let clean = e.target.value.replace(/[^0-9]/g, '');
+                        clean = clean.replace(/^0+(?=\d)/, '');
+                        if (clean !== e.target.value) {
+                            e.target.value = clean;
+                        }
+                    }
+                }
+            }
+        }, true);
+
+        // Save button logic
+        document.getElementById('save-budget-btn').addEventListener('click', function() {
+            if (!table1) return;
+
+            const costCenterName = costCenterSelect.value;
+            const branchCode = branchSelectEl ? branchSelectEl.value : null;
+            if (branchSelectEl && !branchCode) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือกสาขาก่อนบันทึก', 'warning');
+                return;
+            }
+            if (!costCenterName) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือก Cost Center ก่อนบันทึก', 'warning');
+                return;
+            }
+
+            let rows = table1.getData();
+            let dataToSave = [];
+            let emptyMonthRows = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i];
+                let position = (row[0] || '').trim();
+                let detail = row[1];
+                let salary = getNum(row[2]);
+                let allowance = getNum(row[3]);
+
+                if (position) {
+                    const isPositionInMaster = items.some(it => it.name === position);
+                    if (!isPositionInMaster) {
+                        Swal.fire('แจ้งเตือน', `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งจากรายการ Dropdown เท่านั้น\n(แถวที่ ${i + 1}: "${position}" ไม่มีอยู่ในรายการตัวเลือก)`, 'warning');
+                        return;
+                    }
+
+                    if (salary <= 0 && allowance <= 0) {
+                        Swal.fire('แจ้งเตือน', `กรุณาระบุเงินเดือนหรือค่าวัดระดับ/ตำแหน่งสำหรับ "${position}" (แถวที่ ${i + 1})`, 'warning');
+                        return;
+                    }
+
+                    const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const monthCounts = [];
+                    let hasPositiveMonth = false;
+                    for (let c = 4; c <= 15; c++) {
+                        const val = row[c];
+                        const rawStr = String(val !== null && val !== undefined ? val : '').trim().replace(/,/g, '');
+                        const count = getNum(val);
+                        if (rawStr !== '') {
+                            if (!/^\d+$/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 4]} ต้องเป็นตัวเลขเท่านั้น ไม่อนุญาตให้มีตัวอักษรหรืออักขระพิเศษ เช่น "${rawStr}" (แถวที่ ${i + 1}: ${position})`, 'warning');
+                                return;
+                            }
+                            if (/^0\d+/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 4]} ไม่อนุญาตให้กรอกรูปแบบที่มีเลข 0 นำหน้า เช่น "${rawStr}" (แถวที่ ${i + 1}: ${position}) กรุณาระบุเป็นตัวเลขจำนวนเต็มปกติ`, 'warning');
+                                return;
+                            }
+                            if (count % 1 !== 0 || count < 0) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 4]} ต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม (แถวที่ ${i + 1}: ${position})`, 'warning');
+                                return;
+                            }
+                        }
+                        if (count > 0) {
+                            hasPositiveMonth = true;
+                        }
+                        monthCounts.push(count);
+                    }
+                    if (!hasPositiveMonth) {
+                        let cleanDesc = (detail !== null && detail !== undefined ? String(detail) : "").trim();
+                        emptyMonthRows.push({ rowNumber: i + 1, name: position, desc: cleanDesc });
+                    }
+                    const monthlyBudget = computeMonthlyBudget(monthCounts, salary + allowance);
+                    const salaryBudget = computeMonthlyBudget(monthCounts, salary);
+                    const allowanceBudget = computeMonthlyBudget(monthCounts, allowance);
+
+                    let monthlyData = {};
+                    monthKeys.forEach((key, idx) => {
+                        monthlyData[key] = {
+                            headcount: monthCounts[idx],
+                            cost: monthlyBudget[idx].cost,
+                            salary: salaryBudget[idx].cost,
+                            position_allowance: allowanceBudget[idx].cost
+                        };
+                    });
+
+                    dataToSave.push({
+                        'position_name': position,
+                        'description': detail || '',
+                        'salary': salary,
+                        'position_allowance': allowance,
+                        'branch_code': branchCode,
+                        'cost_center_name': costCenterName,
+                        'monthly_data': monthlyData
+                    });
+                }
+            }
+            
+            if (emptyMonthRows.length > 0) {
+                showZeroMonthlyRowsWarning(emptyMonthRows);
+                return;
+            }
+
+            if (dataToSave.length === 0) {
+                Swal.fire('แจ้งเตือน', 'ไม่มีข้อมูลสำหรับบันทึก กรุณาระบุข้อมูลตำแหน่งก่อนครับ', 'warning');
+                return;
+            }
+            
+            const proceedWithSave = function() {
+                Swal.fire({
+                title: 'ยืนยันการบันทึกข้อมูล?',
+                text: "คุณตรวจสอบข้อมูลครบถ้วนและต้องการบันทึกใช่หรือไม่?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#0061f2',
+                cancelButtonColor: '#e81500',
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'กำลังบันทึกข้อมูล...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    fetch('{{ route('budget_add_non_vet') }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify(dataToSave)
+                    })
+                                        .then(response => window.handleFetchApiResponse(response))
+                    .then(data => {
+                        if (data.status === 'success') {
+                            Swal.fire('สำเร็จ!', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success').then(() => {
+                                window.location.href = '{{ route('budget_list') }}';
+                            });
+                        } else if (data.status === 'duplicate') {
+                            handleBudgetSaveDuplicateResponse(data, '{{ route('budget_list') }}');
+                        } else {
+                            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้: ' + data.message, 'error');
+                        }
+                    })
+                    .catch(window.handleFetchApiError);
+                }
+            });
+            };
+
+            if (typeof window.checkDuplicateBeforeSave === 'function') {
+                window.checkDuplicateBeforeSave({
+                    docType: 'NON VET',
+                    branchCode: branchCode,
+                    costCenterName: costCenterName,
+                    checkUrl: '{{ route('api_check_duplicate_document') }}',
+                    budgetListUrl: '{{ route('budget_list') }}',
+                    onProceed: proceedWithSave
+                });
+            } else {
+                proceedWithSave();
+            }
+        });
+    });
+</script>
+@endsection

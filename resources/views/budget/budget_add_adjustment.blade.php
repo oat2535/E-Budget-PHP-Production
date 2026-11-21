@@ -1,0 +1,1225 @@
+@extends('layouts.app')
+
+
+@section('title', 'Add Budget - Position Adjustment (ปรับตำแหน่ง)')
+
+@section('extra_css')
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jexcel/jexcel.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jsuites/jsuites.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/tom-select/tom-select.bootstrap5.min.css') }}">
+<style>
+    .jexcel_container {
+        width: 100%;
+        max-width: 100%;
+    }
+    .jexcel_content {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .jexcel {
+        width: 100% !important;
+    }
+    .card-body {
+        overflow: hidden;
+    }
+    /* The blanket rule above contains the jspreadsheet grid, but it also
+       clips the Cost Center / branch dropdowns' floating option lists
+       (absolutely positioned children that need to escape their card to
+       render fully). */
+    #cost-center-card-body {
+        overflow: visible;
+    }
+    .jexcel tbody tr td {
+        vertical-align: middle;
+    }
+    .jexcel tbody tr td.readonly {
+        background-color: #f8f9fa;
+        color: #6c757d;
+    }
+    /* Text/dropdown columns are set to align:'left' on their column
+       definition (see budget_list.js / this page's inline <script>) so
+       their cell content reads left-aligned — but jexcel ties a column's
+       header alignment to the same `align` property, so without this the
+       header text would also shift left. jexcel sets header alignment as
+       a plain (non-!important) inline style, so this cheaply overrides it
+       back to centered without touching the data cells below. */
+    .jexcel > thead > tr > td {
+        text-align: center !important;
+    }
+</style>
+@endsection
+
+@section('content')
+<header class="page-header page-header-dark bg-gradient-primary-to-secondary pb-10">
+    <div class="container-fluid px-4">
+        <div class="page-header-content pt-4">
+            <div class="row align-items-center justify-content-between">
+                <div class="col-auto mt-4">
+                    <h1 class="page-header-title">
+                        <div class="page-header-icon"><i data-feather="repeat"></i></div>
+                        Position Adjustment (ปรับตำแหน่ง)
+                    </h1>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="container-fluid px-4 mt-n10">
+    <div class="card mb-4 shadow-sm border-0 card-soft eb-cost-center-card">
+        <div class="card-body" id="cost-center-card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="cost-center-select" class="form-label fw-500">Cost Center <span class="text-danger">*</span></label>
+                    <select id="cost-center-select" class="form-select" placeholder="-- เลือก Cost Center --"></select>
+                </div>
+                @if($needs_branch_selection)
+                <div class="col-md-6">
+                    <label for="branch-select" class="form-label fw-500">สาขา <span class="text-danger">*</span></label>
+                    <select id="branch-select" class="form-select" placeholder="-- เลือกสาขา --"></select>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Tables Card: Position Adjustment (Tables 1 - 3) -->
+    <div class="card mb-4 shadow-sm border-0 card-soft" id="adjustment-tables-card">
+        <!-- Table 1 Header (Sticky across all 3 tables) -->
+        <div class="card-header d-flex justify-content-between align-items-center bg-white py-3 eb-sticky-header">
+            <div class="d-flex align-items-center gap-2">
+                <h6 class="m-0 font-weight-bold text-primary" id="adjustment-sticky-title">ตารางที่ 1 (จำนวนคน)</h6>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{{ route('budget_list') }}" class="btn btn-sm btn-outline-secondary shadow-xs fw-500" style="min-width: 90px;"><i data-feather="arrow-left" class="me-1"></i> กลับ</a>
+                <button id="add-row-btn" class="btn btn-sm btn-primary shadow-xs fw-500"><i data-feather="plus" class="me-1"></i> เพิ่มรายการ</button>
+                <button id="save-budget-btn" class="btn btn-sm btn-success shadow-xs fw-500" style="min-width: 95px;"><i data-feather="save" class="me-1"></i> บันทึก</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="table1-spreadsheet"></div>
+        </div>
+
+        <!-- Table 2: Salary Diff -->
+        <div class="card-header bg-white py-3 border-top" id="header-table-2">
+            <h6 class="m-0 font-weight-bold text-success">ตารางที่ 2 (งบประมาณผลต่างเงินเดือน)</h6>
+        </div>
+        <div class="card-body p-0">
+            <div id="table2-spreadsheet"></div>
+        </div>
+
+        <!-- Table 3: Allowance Diff -->
+        <div class="card-header bg-white py-3 border-top" id="header-table-3">
+            <h6 class="m-0 font-weight-bold text-info">ตารางที่ 3 (งบประมาณผลต่างค่าวัดระดับ/ค่าตำแหน่ง)</h6>
+        </div>
+        <div class="card-body p-0">
+            <div id="table3-spreadsheet"></div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@section('extra_js')
+<script src="{{ asset('static/budget_app/vendor/jexcel/jexcel.js') }}"></script>
+<script src="{{ asset('static/budget_app/vendor/jsuites/jsuites.js') }}"></script>
+<script defer src="{{ asset('static/budget_app/vendor/tom-select/tom-select.complete.min.js') }}"></script>
+
+<script id="items-data" type="application/json">{!! json_encode($items_json ?? []) !!}</script>
+<script id="cost-centers-data" type="application/json">{!! json_encode($cost_centers_json ?? []) !!}</script>
+<script id="branch-options-data" type="application/json">{!! json_encode($branch_options_json ?? []) !!}</script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Preserves master item order (id ASC) loaded from the database
+        const items = JSON.parse(document.getElementById('items-data').textContent);
+
+        // ตำแหน่งเดิม/ใหม่ datalist กรองตามคอลัมน์ "ประเภท" ของแถวตัวเอง:
+        // รองรับการพิมพ์ static text อิสระ และยังคงมี autocomplete จาก item master
+        const vetPositions = items.filter(i => i.group === 'VET Manpower');
+        const nonVetPositions = items.filter(i => i.group === 'NON VET Manpower');
+
+        const createDatalist = (id, itemList) => {
+            let dl = document.getElementById(id);
+            if (!dl) {
+                dl = document.createElement('datalist');
+                dl.id = id;
+                document.body.appendChild(dl);
+            }
+            dl.innerHTML = '';
+            itemList.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                dl.appendChild(opt);
+            });
+            return dl;
+        };
+
+        createDatalist('adj-vet-positions-datalist', vetPositions);
+        createDatalist('adj-non-vet-positions-datalist', nonVetPositions);
+        createDatalist('adj-type-datalist', [{ name: 'VET' }, { name: 'NON VET' }]);
+
+        const adjTypeEditor = {
+            createCell: function(cell) {
+                cell.classList.add('eb-dropdown-cell');
+                return cell;
+            },
+            updateCell: function(cell, value, force) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+                return value;
+            },
+            setValue: function(cell, value) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+            },
+            openEditor: function(cell, el, empty, def) {
+                const rect = cell.getBoundingClientRect();
+                const input = document.createElement('input');
+
+                input.setAttribute('list', 'adj-type-datalist');
+                input.className = 'jexcel_editor eb-dropdown-input';
+                input.style.width = rect.width + 'px';
+                input.style.height = (rect.height - 2) + 'px';
+                input.style.minHeight = (rect.height - 2) + 'px';
+                input.style.boxSizing = 'border-box';
+                input.style.border = 'none';
+                input.style.outline = 'none';
+                input.style.padding = '0 4px';
+                input.style.font = 'inherit';
+
+                const currentValue = cell.innerText || '';
+                input.value = empty ? '' : currentValue;
+
+                cell.classList.add('editor');
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+
+                try {
+                    if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                    }
+                } catch (e) {}
+
+                input.onkeydown = function(e) {
+                    if (e.which === 13) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, true);
+                        setTimeout(syncTableRows, 0);
+                    } else if (e.which === 27) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, false);
+                    }
+                };
+
+                input.onblur = function() {
+                    if (table1 && table1.edition) table1.closeEditor(cell, true);
+                };
+            },
+            closeEditor: function(cell, save) {
+                const input = cell.querySelector('input');
+                return (input ? input.value : (cell.innerText || '')).trim();
+            }
+        };
+
+        let lastVetAllowanceAlertTime = 0;
+        function showVetAllowanceAlert() {
+            const now = Date.now();
+            if (now - lastVetAllowanceAlertTime < 1000) return;
+            lastVetAllowanceAlertTime = now;
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'แจ้งเตือน',
+                    text: 'ตำแหน่งประเภท VET ไม่มีค่าตำแหน่ง (ค่าวัดระดับ) จึงไม่สามารถระบุค่าตำแหน่งเดิมหรือค่าตำแหน่งใหม่ได้ครับ (กรอกได้เฉพาะประเภท NON VET)',
+                    confirmButtonText: 'ตกลง',
+                    confirmButtonColor: '#3085d6',
+                    timer: 4000
+                });
+            }
+        }
+
+        const adjPositionEditor = {
+            createCell: function(cell) {
+                cell.classList.add('eb-dropdown-cell');
+                return cell;
+            },
+            updateCell: function(cell, value, force) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+                return value;
+            },
+            setValue: function(cell, value) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+            },
+            openEditor: function(cell, el, empty, def) {
+                const y = parseInt(cell.getAttribute('data-y'));
+                const rowType = (!isNaN(y) && table1) ? (table1.getValueFromCoords(0, y) || '').trim().toUpperCase() : '';
+
+                if (rowType !== 'VET' && rowType !== 'NON VET') {
+                    if (table1 && table1.edition) {
+                        setTimeout(function() {
+                            if (table1 && table1.edition) table1.closeEditor(cell, false);
+                        }, 0);
+                    }
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'แจ้งเตือน',
+                        text: 'กรุณาเลือกประเภท (VET หรือ NON VET) ในคอลัมน์ "ประเภท" ก่อนครับ',
+                        timer: 3000,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                    return;
+                }
+
+                const rect = cell.getBoundingClientRect();
+                const input = document.createElement('input');
+
+                let listId = rowType === 'VET' ? 'adj-vet-positions-datalist' : 'adj-non-vet-positions-datalist';
+
+                input.setAttribute('list', listId);
+                input.className = 'jexcel_editor eb-dropdown-input';
+                input.style.width = rect.width + 'px';
+                input.style.height = (rect.height - 2) + 'px';
+                input.style.minHeight = (rect.height - 2) + 'px';
+                input.style.boxSizing = 'border-box';
+                input.style.border = 'none';
+                input.style.outline = 'none';
+                input.style.padding = '0 4px';
+                input.style.font = 'inherit';
+
+                const currentValue = cell.innerText || '';
+                input.value = empty ? '' : currentValue;
+
+                cell.classList.add('editor');
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+
+                try {
+                    if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                    }
+                } catch (e) {}
+
+                input.onkeydown = function(e) {
+                    if (e.which === 13) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, true);
+                        setTimeout(syncTableRows, 0);
+                    } else if (e.which === 27) {
+                        if (table1 && table1.edition) table1.closeEditor(cell, false);
+                    }
+                };
+
+                input.onblur = function() {
+                    if (table1 && table1.edition) table1.closeEditor(cell, true);
+                };
+            },
+            closeEditor: function(cell, save) {
+                const input = cell.querySelector('input');
+                const val = input ? input.value.trim() : (cell.innerText || '').trim();
+                const y = parseInt(cell.getAttribute('data-y'));
+                const x = parseInt(cell.getAttribute('data-x'));
+                const rowType = (!isNaN(y) && table1) ? (table1.getValueFromCoords(0, y) || '').trim().toUpperCase() : '';
+
+                if (rowType !== 'VET' && rowType !== 'NON VET') {
+                    return '';
+                }
+                const allowedList = rowType === 'VET' ? vetPositions : nonVetPositions;
+                if (val !== '' && !allowedList.some(i => i.name === val)) {
+                    const label = x === 1 ? 'ตำแหน่งเดิม' : 'ตำแหน่งใหม่';
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'แจ้งเตือน',
+                        text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือก${label}จากรายการ Dropdown เท่านั้น ("${val}" ไม่มีอยู่ในรายการของประเภท ${rowType})`,
+                        timer: 3000,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                    return '';
+                }
+                return val;
+            }
+        };
+
+        // Helper functions
+        const getSalary = (name) => {
+            const match = items.find(i => i.name === name);
+            return match ? match.salary : 0;
+        };
+        const getAllowance = (name) => {
+            const match = items.find(i => i.name === name);
+            return match ? match.position_allowance : 0;
+        };
+        const getNum = (val) => parseFloat(String(val).replace(/,/g, '')) || 0;
+
+        // Cost center select: chosen once for the whole document, stamped
+        // onto every row on save (not a per-row jspreadsheet column).
+        const costCenters = JSON.parse(document.getElementById('cost-centers-data').textContent);
+        const costCenterSelect = document.getElementById('cost-center-select');
+        new TomSelect(costCenterSelect, {
+            options: costCenters.map(cc => ({ value: cc.cost_center_name, text: `${cc.cost_center_code}: ${cc.cost_center_name}` })),
+            valueField: 'value',
+            labelField: 'text',
+            searchField: ['text', 'value'],
+            create: false,
+            placeholder: '-- เลือก Cost Center --',
+        });
+
+        // Branch select: only present when the user belongs to more than
+        // one branch (see get_branch_selection_context in views.py) —
+        // stamped onto the document the same way cost center is.
+        const branchSelectEl = document.getElementById('branch-select');
+        if (branchSelectEl) {
+            const branchOptions = JSON.parse(document.getElementById('branch-options-data').textContent);
+            new TomSelect(branchSelectEl, {
+                options: branchOptions.map(b => ({ value: b.code, text: `${b.code} - ${b.name}` })),
+                valueField: 'value',
+                labelField: 'text',
+                searchField: ['text', 'value'],
+                create: false,
+                placeholder: '-- เลือกสาขา --',
+            });
+        }
+
+        // Carry-forward budget: every month's cost is the running headcount total
+        // (all entries so far this year) times rate, not just that month's own
+        // entry — a position adjustment continues costing the salary/allowance
+        // difference in every month after it's made, including the month it
+        // was made in.
+        const computeMonthlyBudget = (monthCounts, rate) => {
+            let cumulative = 0;
+            return monthCounts.map((count) => {
+                cumulative += count;
+                return { count, cost: cumulative * rate };
+            });
+        };
+
+        // Table 1 Config
+        const cols1 = [
+            // Chosen explicitly per row (not inferred from the position —
+            // old/new share one combined VET+NON VET dropdown list with
+            // nothing else marking which type a row is) since GL coding
+            // depends on it and must work even for a custom position typed
+            // in free-hand, not found in master data at all.
+            { type: 'text', align: 'left', title: 'ประเภท', width: 100, editor: adjTypeEditor },
+            { type: 'text', align: 'left', title: 'ตำแหน่งเดิม', width: 200, editor: adjPositionEditor },
+            { type: 'text', align: 'left', title: 'รายละเอียดตำแหน่งเดิม', width: 180 },
+            { type: 'text', align: 'left', title: 'ตำแหน่งใหม่', width: 200, editor: adjPositionEditor },
+            { type: 'text', align: 'left', title: 'รายละเอียดตำแหน่งใหม่', width: 180 },
+            { type: 'numeric', title: 'เงินเดือนเดิม', width: 100, mask: '#,##0' },
+            { type: 'numeric', title: 'ค่าตำแหน่งเดิม', width: 120, mask: '#,##0' },
+            { type: 'numeric', title: 'รวมรายได้เดิม', width: 110, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'เงินเดือนใหม่', width: 100, mask: '#,##0' },
+            { type: 'numeric', title: 'ค่าตำแหน่งใหม่', width: 120, mask: '#,##0' },
+            { type: 'numeric', title: 'รวมรายได้ใหม่', width: 110, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'ผลต่างเงินเดือน', width: 110, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'ผลต่างค่าตำแหน่ง', width: 120, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 60 },
+            { type: 'numeric', title: 'Feb', width: 60 },
+            { type: 'numeric', title: 'Mar', width: 60 },
+            { type: 'numeric', title: 'Apr', width: 60 },
+            { type: 'numeric', title: 'May', width: 60 },
+            { type: 'numeric', title: 'Jun', width: 60 },
+            { type: 'numeric', title: 'Jul', width: 60 },
+            { type: 'numeric', title: 'Aug', width: 60 },
+            { type: 'numeric', title: 'Sep', width: 60 },
+            { type: 'numeric', title: 'Oct', width: 60 },
+            { type: 'numeric', title: 'Nov', width: 60 },
+            { type: 'numeric', title: 'Dec', width: 60 },
+            { type: 'numeric', title: 'รวม (คน)', width: 80, readOnly: true, mask: '#,##0' }
+        ];
+
+        // Table 2 Config
+        const cols2 = [
+            { type: 'text', align: 'left', title: 'ตำแหน่งเดิม', width: 200, readOnly: true },
+            { type: 'text', align: 'left', title: 'ตำแหน่งใหม่', width: 200, readOnly: true },
+            { type: 'numeric', title: 'ผลต่างเงินเดือน', width: 110, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Feb', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Mar', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Apr', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'May', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jun', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jul', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Aug', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Sep', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Oct', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Nov', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Dec', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'รวม (เงิน)', width: 110, readOnly: true, mask: '#,##0' }
+        ];
+
+        // Table 3 Config
+        const cols3 = [
+            { type: 'text', align: 'left', title: 'ตำแหน่งเดิม', width: 200, readOnly: true },
+            { type: 'text', align: 'left', title: 'ตำแหน่งใหม่', width: 200, readOnly: true },
+            { type: 'numeric', title: 'ผลต่างค่าตำแหน่ง', width: 120, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Feb', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Mar', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Apr', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'May', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jun', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jul', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Aug', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Sep', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Oct', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Nov', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Dec', width: 80, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'รวม (เงิน)', width: 110, readOnly: true, mask: '#,##0' }
+        ];
+
+        let table1, table2, table3;
+        let isUpdating = false;
+
+        const syncTableRows = function() {
+            if (!table1 || !table2 || !table3) return;
+            const count1 = (table1.rows && table1.rows.length) || 0;
+            while (table2.rows.length < count1) {
+                table2.insertRow();
+            }
+            while (table2.rows.length > count1 && table2.rows.length > 1) {
+                table2.deleteRow(table2.rows.length - 1);
+            }
+            while (table3.rows.length < count1) {
+                table3.insertRow();
+            }
+            while (table3.rows.length > count1 && table3.rows.length > 1) {
+                table3.deleteRow(table3.rows.length - 1);
+            }
+        };
+
+        const onchange = function(instance, cell, x, y, value) {
+            if (!table1 || !table2 || !table3 || isUpdating) return;
+            isUpdating = true;
+
+            try {
+
+            x = parseInt(x);
+            y = parseInt(y);
+
+            // table1's row count can only get ahead of table2/table3's through
+            // the oninsertrow hook below, which keeps them synced regardless of
+            // how the row was added — but guard here too in case a future
+            // jspreadsheet interaction (e.g. paste) still slips a row past it.
+            if (y >= table2.rows.length || y >= table3.rows.length) {
+                syncTableRows();
+                if (y >= table2.rows.length || y >= table3.rows.length) return;
+            }
+
+            let oldSal = getNum(table1.getValueFromCoords(5, y));
+            let oldAllow = getNum(table1.getValueFromCoords(6, y));
+            let newSal = getNum(table1.getValueFromCoords(8, y));
+            let newAllow = getNum(table1.getValueFromCoords(9, y));
+
+            // Type (ประเภท) Changed
+            if (x === 0) {
+                const trimmedVal = (value || '').trim();
+                let newType = '';
+                if (trimmedVal !== '') {
+                    const upper = trimmedVal.toUpperCase();
+                    if (upper === 'VET') {
+                        newType = 'VET';
+                        if (trimmedVal !== 'VET') table1.setValueFromCoords(0, y, 'VET', true);
+                    } else if (upper === 'NON VET' || upper === 'NON-VET' || upper === 'NONVET') {
+                        newType = 'NON VET';
+                        if (trimmedVal !== 'NON VET') table1.setValueFromCoords(0, y, 'NON VET', true);
+                    } else {
+                        table1.setValueFromCoords(0, y, '', true);
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกประเภท (VET หรือ NON VET) จากรายการ Dropdown เท่านั้น ("${trimmedVal}" ไม่ถูกต้อง)`,
+                            timer: 3000,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                }
+                if (newType === 'VET') {
+                    table1.setValueFromCoords(6, y, 0, true);
+                    table1.setValueFromCoords(9, y, 0, true);
+                    oldAllow = 0;
+                    newAllow = 0;
+                }
+                const curOldPos = (table1.getValueFromCoords(1, y) || '').trim();
+                const curNewPos = (table1.getValueFromCoords(3, y) || '').trim();
+                const allowedList = newType === 'VET' ? vetPositions : (newType === 'NON VET' ? nonVetPositions : []);
+                if (curOldPos !== '') {
+                    if (!allowedList.some(i => i.name === curOldPos)) {
+                        table1.setValueFromCoords(1, y, '', true);
+                        table1.setValueFromCoords(5, y, 0, true);
+                        table1.setValueFromCoords(6, y, 0, true);
+                        oldSal = 0;
+                        oldAllow = 0;
+                    }
+                }
+                if (curNewPos !== '') {
+                    if (!allowedList.some(i => i.name === curNewPos)) {
+                        table1.setValueFromCoords(3, y, '', true);
+                        table1.setValueFromCoords(8, y, 0, true);
+                        table1.setValueFromCoords(9, y, 0, true);
+                        newSal = 0;
+                        newAllow = 0;
+                    }
+                }
+            }
+
+            // Old Position Changed
+            if (x === 1) {
+                const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                const trimmedVal = (value || '').trim();
+                if (rowType !== 'VET' && rowType !== 'NON VET') {
+                    oldSal = 0;
+                    oldAllow = 0;
+                    table1.setValueFromCoords(1, y, '', true);
+                    table1.setValueFromCoords(5, y, 0, true);
+                    table1.setValueFromCoords(6, y, 0, true);
+                    if (trimmedVal !== '') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: 'กรุณาเลือกประเภท (VET หรือ NON VET) ในคอลัมน์ "ประเภท" ก่อนครับ',
+                            timer: 3000,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                } else if (trimmedVal !== '') {
+                    const allowedList = rowType === 'VET' ? vetPositions : nonVetPositions;
+                    const match = allowedList.find(i => i.name === trimmedVal);
+                    if (match) {
+                        oldSal = match.salary || 0;
+                        oldAllow = rowType === 'VET' ? 0 : (match.position_allowance || 0);
+                        table1.setValueFromCoords(5, y, oldSal, true);
+                        table1.setValueFromCoords(6, y, oldAllow, true);
+                    } else {
+                        oldSal = 0;
+                        oldAllow = 0;
+                        table1.setValueFromCoords(1, y, '', true);
+                        table1.setValueFromCoords(5, y, 0, true);
+                        table1.setValueFromCoords(6, y, 0, true);
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งเดิมจากรายการ Dropdown เท่านั้น ("${trimmedVal}" ไม่มีอยู่ในรายการของประเภท ${rowType})`,
+                            timer: 3000,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                } else {
+                    table1.setValueFromCoords(5, y, 0, true);
+                    table1.setValueFromCoords(6, y, 0, true);
+                }
+            }
+
+            // New Position Changed
+            if (x === 3) {
+                const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                const trimmedVal = (value || '').trim();
+                if (rowType !== 'VET' && rowType !== 'NON VET') {
+                    newSal = 0;
+                    newAllow = 0;
+                    table1.setValueFromCoords(3, y, '', true);
+                    table1.setValueFromCoords(8, y, 0, true);
+                    table1.setValueFromCoords(9, y, 0, true);
+                    if (trimmedVal !== '') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: 'กรุณาเลือกประเภท (VET หรือ NON VET) ในคอลัมน์ "ประเภท" ก่อนครับ',
+                            timer: 3000,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                } else if (trimmedVal !== '') {
+                    const allowedList = rowType === 'VET' ? vetPositions : nonVetPositions;
+                    const match = allowedList.find(i => i.name === trimmedVal);
+                    if (match) {
+                        newSal = match.salary || 0;
+                        newAllow = rowType === 'VET' ? 0 : (match.position_allowance || 0);
+                        table1.setValueFromCoords(8, y, newSal, true);
+                        table1.setValueFromCoords(9, y, newAllow, true);
+                    } else {
+                        newSal = 0;
+                        newAllow = 0;
+                        table1.setValueFromCoords(3, y, '', true);
+                        table1.setValueFromCoords(8, y, 0, true);
+                        table1.setValueFromCoords(9, y, 0, true);
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งใหม่จากรายการ Dropdown เท่านั้น ("${trimmedVal}" ไม่มีอยู่ในรายการของประเภท ${rowType})`,
+                            timer: 3000,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                } else {
+                    table1.setValueFromCoords(8, y, 0, true);
+                    table1.setValueFromCoords(9, y, 0, true);
+                }
+            }
+
+            // Manual Salary/Allowance Changed
+            if (x === 5) oldSal = getNum(value);
+            if (x === 6) {
+                const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                if (rowType === 'VET') {
+                    oldAllow = 0;
+                    table1.setValueFromCoords(6, y, 0, true);
+                    showVetAllowanceAlert();
+                } else {
+                    oldAllow = getNum(value);
+                }
+            }
+            if (x === 8) newSal = getNum(value);
+            if (x === 9) {
+                const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                if (rowType === 'VET') {
+                    newAllow = 0;
+                    table1.setValueFromCoords(9, y, 0, true);
+                    showVetAllowanceAlert();
+                } else {
+                    newAllow = getNum(value);
+                }
+            }
+
+            // Calc Income Totals & Diffs
+            if (x === 0 || x === 1 || x === 3 || x === 5 || x === 6 || x === 8 || x === 9) {
+                let oldTotal = oldSal + oldAllow;
+                let newTotal = newSal + newAllow;
+                table1.setValueFromCoords(7, y, oldTotal, true);
+                table1.setValueFromCoords(10, y, newTotal, true);
+
+                table1.setValueFromCoords(11, y, newSal - oldSal, true);
+                table1.setValueFromCoords(12, y, newAllow - oldAllow, true);
+            }
+
+            // Enforce integer จำนวนคน (digits only) without leading zeros in month columns (x = 13 to 24)
+            if (x >= 13 && x <= 24) {
+                const rawVal = String(value !== null && value !== undefined ? value : '').trim();
+                if (rawVal !== '') {
+                    const cleanStr = rawVal.replace(/,/g, '');
+                    const cleanDigits = cleanStr.replace(/[^0-9]/g, '');
+                    const hasNonDigits = cleanStr !== cleanDigits;
+                    const hasLeadingZero = /^0\d+/.test(cleanDigits);
+                    const num = parseFloat(cleanStr);
+                    const isDecimal = !isNaN(num) && !Number.isInteger(num);
+
+                    if (hasNonDigits || hasLeadingZero || isDecimal) {
+                        const finalDigits = cleanDigits.replace(/^0+(?=\d)/, '');
+                        const intVal = finalDigits !== '' ? parseInt(finalDigits, 10) : 0;
+                        table1.setValueFromCoords(x, y, intVal, false);
+                        let warnMsg = 'จำนวนคนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกตัวอักษรหรืออักขระพิเศษ';
+                        if (hasLeadingZero && !hasNonDigits && !isDecimal) {
+                            warnMsg = 'ไม่อนุญาตให้กรอกตัวเลขที่มี 0 นำหน้า (เช่น 03, 04) ระบบปรับเป็น ' + intVal + ' ให้เรียบร้อยแล้ว';
+                        } else if (isDecimal && !hasNonDigits && !hasLeadingZero) {
+                            warnMsg = 'จำนวนคนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม';
+                        }
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'แจ้งเตือน',
+                            text: warnMsg,
+                            timer: 2500,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                    }
+                }
+            }
+
+            // Get updated values for sync
+            const rowData1 = table1.getRowData(y);
+            const oldPos = rowData1[1];
+            const newPos = rowData1[3];
+            const diffSal = getNum(rowData1[11]);
+            const diffAllow = getNum(rowData1[12]);
+
+            // Calc Headcount Total (Cols 13 to 24)
+            let sumHC = 0;
+            for(let i = 13; i <= 24; i++) {
+                sumHC += getNum(rowData1[i]);
+            }
+            table1.setValueFromCoords(25, y, sumHC, true);
+
+            const monthCounts = [];
+            for (let i = 13; i <= 24; i++) {
+                monthCounts.push(getNum(rowData1[i]));
+            }
+
+            // Sync with Table 2 (Salary Diff)
+            table2.setValueFromCoords(0, y, oldPos, true);
+            table2.setValueFromCoords(1, y, newPos, true);
+            table2.setValueFromCoords(2, y, diffSal, true);
+
+            const salaryBudget = computeMonthlyBudget(monthCounts, diffSal);
+            let sumSalCost = 0;
+            salaryBudget.forEach((m, idx) => {
+                table2.setValueFromCoords(idx + 3, y, m.cost, true); // table2 jan is col 3
+                sumSalCost += m.cost;
+            });
+            table2.setValueFromCoords(15, y, sumSalCost, true);
+
+            // Sync with Table 3 (Allowance Diff)
+            table3.setValueFromCoords(0, y, oldPos, true);
+            table3.setValueFromCoords(1, y, newPos, true);
+            table3.setValueFromCoords(2, y, diffAllow, true);
+
+            const allowanceBudget = computeMonthlyBudget(monthCounts, diffAllow);
+            let sumAllowCost = 0;
+            allowanceBudget.forEach((m, idx) => {
+                table3.setValueFromCoords(idx + 3, y, m.cost, true); // table3 jan is col 3
+                sumAllowCost += m.cost;
+            });
+            table3.setValueFromCoords(15, y, sumAllowCost, true);
+
+            } finally {
+                // Always clear the guard, even if something above throws —
+                // otherwise every future edit silently no-ops forever (the bug
+                // behind "table freezes until you refresh the page").
+                isUpdating = false;
+            }
+        };
+
+        const initData = () => {
+            const arr = [];
+            for (let i = 0; i < 26; i++) arr.push('');
+            return [arr];
+        };
+
+        table1 = jspreadsheet(document.getElementById('table1-spreadsheet'), {
+            data: initData(),
+            columns: cols1,
+            minDimensions: [26, 1],
+            onchange: onchange,
+            updateTable: function(el, cell, col, row, val, label, cellName) {
+                if (col === 6 || col === 9) {
+                    const sheet = (el && el.jexcel) || table1;
+                    const rowType = (sheet && typeof sheet.getValueFromCoords === 'function')
+                        ? (sheet.getValueFromCoords(0, row) || '').trim().toUpperCase() : '';
+                    if (rowType === 'VET') {
+                        cell.style.backgroundColor = '#f1f3f5';
+                        cell.style.color = '#adb5bd';
+                        cell.style.cursor = 'not-allowed';
+                        cell.classList.add('readonly');
+                    } else {
+                        cell.style.backgroundColor = '';
+                        cell.style.color = '';
+                        cell.style.cursor = '';
+                        cell.classList.remove('readonly');
+                    }
+                }
+            },
+            oneditionstart: function(el, cell, x, y) {
+                x = parseInt(x);
+                y = parseInt(y);
+                if (x === 6 || x === 9) {
+                    const sheet = (el && el.jexcel) || table1;
+                    const rowType = (sheet && typeof sheet.getValueFromCoords === 'function')
+                        ? (sheet.getValueFromCoords(0, y) || '').trim().toUpperCase() : '';
+                    if (rowType === 'VET') {
+                        setTimeout(function() {
+                            if (sheet && sheet.edition) {
+                                sheet.closeEditor(cell, false);
+                            }
+                        }, 0);
+                        showVetAllowanceAlert();
+                    }
+                }
+            },
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            freezeColumns: 5,
+            // table1 can gain a row through more than just the "เพิ่มรายการ"
+            // button — e.g. pressing Enter on its last row — and table2/table3
+            // must always mirror it row-for-row or onchange's cross-table
+            // writes land on a row that doesn't exist yet and throw. Handling
+            // every insertion here (rather than only in the button's click
+            // handler) is what keeps all 3 tables in sync regardless of how
+            // the row was added.
+            oninsertrow: function(el, rowNumber, numOfRows, rowRecords, insertBefore) {
+                if (table2) table2.insertRow(numOfRows, rowNumber, insertBefore);
+                if (table3) table3.insertRow(numOfRows, rowNumber, insertBefore);
+                syncTableRows();
+            },
+            ondeleterow: function(el, rowNumber, numOfRows) {
+                if (table2) table2.deleteRow(rowNumber, numOfRows);
+                if (table3) table3.deleteRow(rowNumber, numOfRows);
+                syncTableRows();
+            },
+            onselection: function(el, x1, y1, x2, y2, origin) {
+                const sheet = (el && el.jexcel) || table1;
+                if (!sheet || typeof sheet.getCellFromCoords !== 'function') return;
+                if ((x1 === 0 || x1 === 1 || x1 === 3) && x1 === x2 && y1 === y2) {
+                    if (x1 === 1 || x1 === 3) {
+                        const rowType = (sheet.getValueFromCoords(0, y1) || '').trim().toUpperCase();
+                        if (rowType !== 'VET' && rowType !== 'NON VET') {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: 'กรุณาเลือกประเภท (VET หรือ NON VET) ในคอลัมน์ "ประเภท" ก่อนครับ',
+                                timer: 3000,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                            return;
+                        }
+                    }
+                    const cell = sheet.getCellFromCoords(x1, y1);
+                    if (cell && !sheet.edition) {
+                        sheet.openEditor(cell, false);
+                    }
+                }
+            },
+        });
+
+        table2 = jspreadsheet(document.getElementById('table2-spreadsheet'), {
+            data: initData().map(r => r.slice(0, 16)),
+            columns: cols2,
+            minDimensions: [16, 1],
+            allowInsertRow: true,
+            allowDeleteRow: true,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            contextMenu: function() { return false; }
+        });
+
+        table3 = jspreadsheet(document.getElementById('table3-spreadsheet'), {
+            data: initData().map(r => r.slice(0, 16)),
+            columns: cols3,
+            minDimensions: [16, 1],
+            allowInsertRow: true,
+            allowDeleteRow: true,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            contextMenu: function() { return false; }
+        });
+        
+        // Bind add row button — table1's oninsertrow hook mirrors this into
+        // table2/table3, so it isn't done here too (that would double-insert).
+        document.getElementById('add-row-btn').addEventListener('click', function() {
+            table1.insertRow();
+        });
+
+        // Ensure table2 and table3 synchronize whenever Enter is pressed to create a new row
+        // And block decimal point (.) and minus (-) in month headcount columns (Jan - Dec: x = 13 to 24)
+        const table1SpreadsheetEl = document.getElementById('table1-spreadsheet');
+        table1SpreadsheetEl.addEventListener('click', function(e) {
+            const td = e.target.closest('td');
+            if (!td) return;
+            const x = parseInt(td.getAttribute('data-x'));
+            const y = parseInt(td.getAttribute('data-y'));
+            if ((x === 6 || x === 9) && !isNaN(y) && table1) {
+                const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                if (rowType === 'VET') {
+                    showVetAllowanceAlert();
+                }
+            }
+        });
+
+        table1SpreadsheetEl.addEventListener('keydown', function(e) {
+            if (e.which === 13) {
+                setTimeout(syncTableRows, 0);
+            }
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                const y = table1.selectedCell[1];
+                if ((x === 6 || x === 9) && !isNaN(y)) {
+                    const rowType = (table1.getValueFromCoords(0, y) || '').trim().toUpperCase();
+                    if (rowType === 'VET') {
+                        const allowedNavKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Escape'];
+                        if (!allowedNavKeys.includes(e.key)) {
+                            e.preventDefault();
+                            showVetAllowanceAlert();
+                        }
+                    }
+                }
+                if (x >= 13 && x <= 24) {
+                    if (e.ctrlKey || e.metaKey || e.altKey) return;
+                    const allowedControlKeys = ['Backspace', 'Tab', 'Enter', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+                    if (allowedControlKeys.includes(e.key)) return;
+                    if (!/^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                    }
+                }
+            }
+        }, true);
+
+        table1SpreadsheetEl.addEventListener('input', function(e) {
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                if (x >= 13 && x <= 24 && e.target && (e.target.tagName === 'INPUT' || e.target.classList.contains('jexcel_editor'))) {
+                    if (e.target.value) {
+                        let clean = e.target.value.replace(/[^0-9]/g, '');
+                        clean = clean.replace(/^0+(?=\d)/, '');
+                        if (clean !== e.target.value) {
+                            e.target.value = clean;
+                        }
+                    }
+                }
+            }
+        }, true);
+
+        // Save logic
+        document.getElementById('save-budget-btn').addEventListener('click', function() {
+            if (!table1) return;
+
+            const costCenterName = costCenterSelect.value;
+            const branchCode = branchSelectEl ? branchSelectEl.value : null;
+            if (branchSelectEl && !branchCode) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือกสาขาก่อนบันทึก', 'warning');
+                return;
+            }
+            if (!costCenterName) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือก Cost Center ก่อนบันทึก', 'warning');
+                return;
+            }
+
+            let rows = table1.getData();
+            let dataToSave = [];
+            let emptyMonthRows = [];
+            
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i];
+                let adjustmentType = (row[0] || '').trim();
+                let oldPos = (row[1] || '').trim();
+                let oldDetail = row[2];
+                let newPos = (row[3] || '').trim();
+                let newDetail = row[4];
+                let oldSal = getNum(row[5]);
+                let oldAllow = getNum(row[6]);
+                let newSal = getNum(row[8]);
+                let newAllow = getNum(row[9]);
+
+                // ประเภท/ตำแหน่งเดิม/ตำแหน่งใหม่ บังคับกรอกครบทั้ง 3 ช่อง —
+                // แถวที่กรอกข้อมูลระบุตัวตนไว้บางส่วน (เช่น เลือกตำแหน่งเดิม
+                // แต่ลืมเลือกประเภท) ต้องบล็อกการบันทึกทั้งเอกสารพร้อมแจ้ง
+                // เตือน ไม่ใช่ข้ามแถวนั้นไปเงียบๆ — ส่วนแถวที่ว่างเปล่าจริงๆ
+                // ทั้ง 3 ช่อง (ไม่ได้ตั้งใจใช้แถวนั้น) ยังข้ามแบบเงียบๆ ตามเดิม
+                const hasAnyIdentityData = adjustmentType || oldPos || newPos;
+                const hasAllRequired = adjustmentType && oldPos && newPos;
+
+                if (hasAnyIdentityData && !hasAllRequired) {
+                    Swal.fire('แจ้งเตือน', `กรุณาเลือกประเภท ตำแหน่งเดิม และตำแหน่งใหม่ให้ครบในแถวที่ ${i + 1} ก่อนบันทึก`, 'warning');
+                    return;
+                }
+
+                if (hasAllRequired) {
+                    if (adjustmentType !== 'VET' && adjustmentType !== 'NON VET') {
+                        Swal.fire('แจ้งเตือน', `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกประเภท (VET หรือ NON VET) จากรายการ Dropdown เท่านั้น\n(แถวที่ ${i + 1}: "${adjustmentType}" ไม่ถูกต้อง)`, 'warning');
+                        return;
+                    }
+                    const allowedList = adjustmentType === 'VET' ? vetPositions : nonVetPositions;
+                    const isOldValid = allowedList.some(it => it.name === oldPos);
+                    if (!isOldValid) {
+                        Swal.fire('แจ้งเตือน', `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งเดิมจากรายการ Dropdown ของประเภท ${adjustmentType} เท่านั้น\n(แถวที่ ${i + 1}: "${oldPos}" ไม่มีอยู่ในรายการตัวเลือก)`, 'warning');
+                        return;
+                    }
+                    const isNewValid = allowedList.some(it => it.name === newPos);
+                    if (!isNewValid) {
+                        Swal.fire('แจ้งเตือน', `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกตำแหน่งใหม่จากรายการ Dropdown ของประเภท ${adjustmentType} เท่านั้น\n(แถวที่ ${i + 1}: "${newPos}" ไม่มีอยู่ในรายการตัวเลือก)`, 'warning');
+                        return;
+                    }
+
+                    if (adjustmentType === 'VET') {
+                        oldAllow = 0;
+                        newAllow = 0;
+                    }
+                    let diffSal = newSal - oldSal;
+                    let diffAllow = newAllow - oldAllow;
+
+                    const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const monthCounts = [];
+                    let hasPositiveMonth = false;
+                    for (let c = 13; c <= 24; c++) {
+                        const val = row[c];
+                        const rawStr = String(val !== null && val !== undefined ? val : '').trim().replace(/,/g, '');
+                        const count = getNum(val);
+                        if (rawStr !== '') {
+                            if (!/^\d+$/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 13]} ต้องเป็นตัวเลขเท่านั้น ไม่อนุญาตให้มีตัวอักษรหรืออักขระพิเศษ เช่น "${rawStr}" (แถวที่ ${i + 1}: ${oldPos} -> ${newPos})`, 'warning');
+                                return;
+                            }
+                            if (/^0\d+/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 13]} ไม่อนุญาตให้กรอกรูปแบบที่มีเลข 0 นำหน้า เช่น "${rawStr}" (แถวที่ ${i + 1}: ${oldPos} -> ${newPos}) กรุณาระบุเป็นตัวเลขจำนวนเต็มปกติ`, 'warning');
+                                return;
+                            }
+                            if (count % 1 !== 0 || count < 0) {
+                                Swal.fire('แจ้งเตือน', `จำนวนคนในเดือน ${monthNames[c - 13]} ต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม (แถวที่ ${i + 1}: ${oldPos} -> ${newPos})`, 'warning');
+                                return;
+                            }
+                        }
+                        if (count > 0) {
+                            hasPositiveMonth = true;
+                        }
+                        monthCounts.push(count);
+                    }
+                    if (!hasPositiveMonth) {
+                        emptyMonthRows.push({ rowNumber: i + 1, name: `${oldPos} -> ${newPos}` });
+                    }
+                    const salaryBudget = computeMonthlyBudget(monthCounts, diffSal);
+                    const allowanceBudget = computeMonthlyBudget(monthCounts, diffAllow);
+                    const oldSalaryBudget = computeMonthlyBudget(monthCounts, oldSal);
+                    const oldAllowanceBudget = computeMonthlyBudget(monthCounts, oldAllow);
+                    const newSalaryBudget = computeMonthlyBudget(monthCounts, newSal);
+                    const newAllowanceBudget = computeMonthlyBudget(monthCounts, newAllow);
+
+                    let monthlyData = {};
+                    monthKeys.forEach((key, idx) => {
+                        monthlyData[key] = {
+                            headcount: monthCounts[idx],
+                            cost: salaryBudget[idx].cost + allowanceBudget[idx].cost,
+                            salary_diff_cost: salaryBudget[idx].cost,
+                            allowance_diff_cost: allowanceBudget[idx].cost,
+                            old_salary: oldSalaryBudget[idx].cost,
+                            old_allowance: oldAllowanceBudget[idx].cost,
+                            new_salary: newSalaryBudget[idx].cost,
+                            new_allowance: newAllowanceBudget[idx].cost,
+                        };
+                    });
+
+                    dataToSave.push({
+                        'adjustment_type': adjustmentType,
+                        'old_position_name': oldPos,
+                        'old_description': oldDetail || '',
+                        'new_position_name': newPos,
+                        'new_description': newDetail || '',
+                        'old_salary': oldSal,
+                        'old_allowance': oldAllow,
+                        'new_salary': newSal,
+                        'new_allowance': newAllow,
+                        'branch_code': branchCode,
+                        'cost_center_name': costCenterName,
+                        'monthly_data': monthlyData
+                    });
+                }
+            }
+            
+            if (emptyMonthRows.length > 0) {
+                showZeroMonthlyRowsWarning(emptyMonthRows);
+                return;
+            }
+
+            if (dataToSave.length === 0) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือกตำแหน่งเดิมและตำแหน่งใหม่ก่อนบันทึก', 'warning');
+                return;
+            }
+            
+            const proceedWithSave = function() {
+                Swal.fire({
+                title: 'ยืนยันการบันทึกข้อมูล?',
+                text: "ตรวจสอบข้อมูลการปรับตำแหน่งเรียบร้อยใช่หรือไม่?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#0061f2',
+                cancelButtonColor: '#e81500',
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'กำลังบันทึก...',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+                    
+                    fetch('{{ route('budget_add_adjustment') }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify(dataToSave)
+                    })
+                                        .then(response => window.handleFetchApiResponse(response))
+                    .then(data => {
+                        if (data.status === 'success') {
+                            Swal.fire('สำเร็จ!', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success').then(() => {
+                                window.location.href = '{{ route('budget_list') }}';
+                            });
+                        } else if (data.status === 'duplicate') {
+                            handleBudgetSaveDuplicateResponse(data, '{{ route('budget_list') }}');
+                        } else {
+                            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้: ' + data.message, 'error');
+                        }
+                    })
+                    .catch(window.handleFetchApiError);
+                }
+            });
+            };
+
+            if (typeof window.checkDuplicateBeforeSave === 'function') {
+                window.checkDuplicateBeforeSave({
+                    docType: 'Position Adjustment',
+                    branchCode: branchCode,
+                    costCenterName: costCenterName,
+                    checkUrl: '{{ route('api_check_duplicate_document') }}',
+                    budgetListUrl: '{{ route('budget_list') }}',
+                    onProceed: proceedWithSave
+                });
+            } else {
+                proceedWithSave();
+            }
+        });
+
+        // Dynamic title update for sticky header when scrolling between tables
+        const stickyTitle = document.getElementById('adjustment-sticky-title');
+        const headerTable2 = document.getElementById('header-table-2');
+        const headerTable3 = document.getElementById('header-table-3');
+
+        if (stickyTitle && headerTable2 && headerTable3) {
+            let ticking = false;
+            const updateStickyTitle = () => {
+                const topOffset = 130; // 58px topnav + ~55px sticky header + safety margin
+                const rect3 = headerTable3.getBoundingClientRect();
+                const rect2 = headerTable2.getBoundingClientRect();
+
+                if (rect3.top <= topOffset) {
+                    if (stickyTitle.textContent !== 'ตารางที่ 3 (งบประมาณผลต่างค่าวัดระดับ/ค่าตำแหน่ง)') {
+                        stickyTitle.textContent = 'ตารางที่ 3 (งบประมาณผลต่างค่าวัดระดับ/ค่าตำแหน่ง)';
+                        stickyTitle.className = 'm-0 font-weight-bold text-info';
+                    }
+                } else if (rect2.top <= topOffset) {
+                    if (stickyTitle.textContent !== 'ตารางที่ 2 (งบประมาณผลต่างเงินเดือน)') {
+                        stickyTitle.textContent = 'ตารางที่ 2 (งบประมาณผลต่างเงินเดือน)';
+                        stickyTitle.className = 'm-0 font-weight-bold text-success';
+                    }
+                } else {
+                    if (stickyTitle.textContent !== 'ตารางที่ 1 (จำนวนคน)') {
+                        stickyTitle.textContent = 'ตารางที่ 1 (จำนวนคน)';
+                        stickyTitle.className = 'm-0 font-weight-bold text-primary';
+                    }
+                }
+                ticking = false;
+            };
+
+            window.addEventListener('scroll', () => {
+                if (!ticking) {
+                    window.requestAnimationFrame(updateStickyTitle);
+                    ticking = true;
+                }
+            }, { passive: true });
+        }
+    });
+</script>
+@endsection

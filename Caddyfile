@@ -1,0 +1,29 @@
+{
+    {$CADDY_GLOBAL_OPTIONS}
+
+    frankenphp {
+        {$FRANKENPHP_CONFIG}
+    }
+
+    servers {
+        trusted_proxies static private_ranges 127.0.0.1/8 ::1
+    }
+}
+
+:8000 {
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+
+    root * /app/public
+    encode zstd br gzip
+
+    # Request body limit for large budget Excel downloads & saves
+    request_body {
+        max_size 64MB
+    }
+
+    php_server
+}

@@ -1,37 +1,41 @@
-# Environment / secrets
+# Environment & Secrets
 .env
+.env.backup
+.env.production
+.env.django.bak
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# PHP & Composer
+/vendor/
+composer.phar
 
-# Django
-staticfiles/
-*.log
-db.sqlite3
+# Laravel Framework
+/storage/*.key
+/storage/logs/*.log
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/node_modules/
+/public/hot
+/public/storage
+/public/build
+.phpunit.result.cache
 
-# Virtual environments
-venv/
-.venv/
-env/
-
-# Editor
+# Editor & OS
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
 
 # Local reference spreadsheets (real budget data, not source code)
 *.xlsx
 ~$*.xlsx
 
-# Local junction exposing .agents/skills to Claude Code as .claude/skills —
-# a per-machine convenience link, not portable across OS. .agents/skills
-# itself is the tracked source; recreate the junction after a fresh clone with:
-#   New-Item -ItemType Junction -Path .claude\skills -Target .agents\skills
-.claude/skills
-
 # Local query & documentation files
 คิวรี่ดึงข้อมูล E-budget_VTHAI.txt
 คิวรี่ดึงข้อมูล E-budget(Jeab)l.txt
 คู่มือการติดตั้ง_PowerQuery_E-Budget.txt
-

@@ -1,0 +1,818 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta name="description" content="" />
+        <meta name="author" content="" />
+        <title>@yield('title', 'E-Budget')</title>
+        <!-- Preload the Metropolis weights actually used on every page
+             (confirmed by what the browser fetches on a normal load) so
+             they're ready at first paint. Combined with font-display: block,
+             this guarantees zero layout shift (CLS) and ensures the branded
+             font is never dropped on cold loads/hard reloads (Ctrl+F5). -->
+        <link rel="preload" as="font" type="font/otf" href="{{ asset('static/budget_app/assets/fonts/metropolis/Metropolis-Regular.otf') }}" crossorigin>
+        <link rel="preload" as="font" type="font/otf" href="{{ asset('static/budget_app/assets/fonts/metropolis/Metropolis-Medium.otf') }}" crossorigin>
+        <link rel="preload" as="font" type="font/otf" href="{{ asset('static/budget_app/assets/fonts/metropolis/Metropolis-SemiBold.otf') }}" crossorigin>
+        <link rel="preload" as="font" type="font/otf" href="{{ asset('static/budget_app/assets/fonts/metropolis/Metropolis-Bold.otf') }}" crossorigin>
+        @yield('vendor_css')
+        <link href="{{ asset('static/budget_app/css/styles.css') }}?v=20261120_03" rel="stylesheet" />
+        <link href="{{ asset('static/budget_app/css/theme-override.css') }}?v=20261120_01" rel="stylesheet" />
+        <link href="{{ asset('static/budget_app/css/polish.css') }}?v=20261120_01" rel="stylesheet" />
+        @yield('extra_css')
+        <link rel="icon" type="image/jpeg" href="{{ asset('static/budget_app/assets/img/coins.jpg') }}" />
+        <script data-search-pseudo-elements defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/js/all.min.js" crossorigin="anonymous"></script>
+        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js" crossorigin="anonymous"></script>
+        <!-- SweetAlert2 -->
+        <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <style>
+            .ts-control {
+                flex-wrap: nowrap !important;
+            }
+            .ts-control > .item {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                max-width: calc(100% - 24px) !important;
+                display: inline-block !important;
+                vertical-align: middle !important;
+                /* Flex items default to min-width:auto, which refuses to
+                   shrink below the unwrapped text's intrinsic width — the
+                   classic reason ellipsis/nowrap/overflow above get ignored
+                   and the whole control wraps to a second line instead of
+                   truncating once the selected text is long enough. */
+                min-width: 0 !important;
+            }
+        </style>
+    </head>
+    <body class="nav-fixed" data-authenticated="{{ Auth::check() ? 'true' : 'false' }}" data-username="{{ Auth::user()->username ?? '' }}" data-privileged="{{ ($is_privileged_user ?? false) ? 'true' : 'false' }}" data-executive-view-only="{{ ($is_view_only ?? false) ? 'true' : 'false' }}" data-view-only="{{ ($is_view_only ?? false) ? 'true' : 'false' }}" data-idle-timeout-seconds="{{ $session_idle_timeout_seconds ?? '' }}" data-system-frozen="{{ ($system_frozen ?? false) ? 'true' : 'false' }}" data-active-budget-year="{{ $active_budget_year ?? '' }}" data-frozen-message="{{ $frozen_message ?? '' }}" data-toggle-freeze-url="{{ route('toggle_freeze') }}" data-set-year-url="{{ route('set_active_year') }}" data-csrf-token="{{ csrf_token() }}">
+        <script>
+            // Apply theme immediately to prevent flash
+            (function() {
+                const savedTheme = localStorage.getItem('app-theme') || 'auto';
+                let activeTheme = savedTheme;
+                if (savedTheme === 'auto') {
+                    activeTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                if (activeTheme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (savedTheme === 'flat') {
+                    document.body.classList.add('theme-flat');
+                }
+            })();
+        </script>
+        <nav class="topnav navbar navbar-expand shadow justify-content-between justify-content-sm-start navbar-light bg-white" id="sidenavAccordion">
+            <!-- Sidenav Toggle Button-->
+            <button class="btn btn-icon btn-transparent-dark order-1 order-lg-0 me-2 ms-lg-2 me-lg-0" id="sidebarToggle"><i data-feather="menu"></i></button>
+            <!-- Navbar Brand-->
+            <!-- * * Tip * * You can use text or an image for your navbar brand.-->
+            <!-- * * * * * * When using an image, we recommend the SVG format.-->
+            <!-- * * * * * * Dimensions: Maximum height: 32px, maximum width: 240px-->
+            <a class="navbar-brand pe-3 ps-4 ps-lg-2" href="{{ route('budget_list') }}"><i class="fas fa-coins text-primary me-2"></i>E-Budget</a>
+            <!-- Navbar Search Input-->
+            <!-- * * Note: * * Visible only on and above the lg breakpoint-->
+            
+            <!-- Navbar Items-->
+            <ul class="navbar-nav align-items-center ms-auto">
+                <!-- System Frozen status badge — visible to everyone while
+                     frozen (privileged users already get the unlock icon
+                     below, but this makes the state legible at a glance
+                     without hovering/reading it). -->
+                @if($system_frozen)
+                <li class="nav-item me-3">
+                    <span class="badge bg-danger d-flex align-items-center px-3 py-2" style="font-size: 0.8rem;" title="{{ $frozen_message ?? '' }}">
+                        <i data-feather="lock" style="width: 14px; height: 14px;" class="me-1"></i>
+                        ปิดงบประมาณชั่วคราว
+                    </span>
+                </li>
+                @endif
+                <!-- Budget Year -->
+                <li class="nav-item dropdown no-caret me-3">
+                    @if($is_privileged_user)
+                    <a class="btn btn-transparent-dark dropdown-toggle d-flex align-items-center" id="navbarDropdownYear" href="javascript:void(0);" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="เลือกปีงบประมาณ">
+                        <i data-feather="calendar" class="me-1"></i> ปีงบประมาณ {{ $active_budget_year ?? '' }}
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end border-0 shadow animated--fade-in-up" aria-labelledby="navbarDropdownYear">
+                        @foreach($budget_year_options as $y)
+                        <a class="dropdown-item budget-year-option d-flex align-items-center justify-content-between" href="javascript:void(0);" data-year="{{ $y ?? '' }}">
+                            {{ $y ?? '' }}@if($y == $active_budget_year)<i data-feather="check" class="ms-2 text-success"></i>@endif
+                        </a>
+                        @endforeach
+                    </div>
+                    @else
+                    <span class="btn btn-transparent-dark d-flex align-items-center disabled" title="ปีงบประมาณที่กำลังดำเนินการ">
+                        <i data-feather="calendar" class="me-1"></i> ปีงบประมาณ {{ $active_budget_year ?? '' }}
+                    </span>
+                    @endif
+                </li>
+                <!-- Freeze Toggle (privileged users only) -->
+                @if($is_privileged_user)
+                <li class="nav-item me-3">
+                    <a class="btn btn-icon btn-transparent-dark" id="freezeToggleBtn" href="javascript:void(0);" title="{{ $system_frozen ? 'ปลด Freeze ระบบ' : 'Freeze ระบบ (ปิดงบประมาณ)' }}" onclick="handleFreezeToggle()">
+                        <i data-feather="{{ $system_frozen ? 'unlock' : 'lock' }}" id="freezeToggleIcon"></i>
+                    </a>
+                </li>
+                @endif
+                <!-- Theme Toggle Dropdown -->
+                <li class="nav-item dropdown no-caret me-3">
+                    <a class="btn btn-icon btn-transparent-dark dropdown-toggle" id="navbarDropdownTheme" href="javascript:void(0);" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Toggle Theme">
+                        <i data-feather="sun" id="themeToggleIcon"></i>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end border-0 shadow animated--fade-in-up" aria-labelledby="navbarDropdownTheme">
+                        <a class="dropdown-item" href="javascript:void(0);" onclick="setTheme('light')"><i data-feather="sun" class="me-2"></i> Light Mode</a>
+                        <a class="dropdown-item" href="javascript:void(0);" onclick="setTheme('dark')"><i data-feather="moon" class="me-2"></i> Dark Mode</a>
+                        <a class="dropdown-item" href="javascript:void(0);" onclick="setTheme('flat')"><i data-feather="droplet" class="me-2"></i> Flat Mode</a>
+                        <a class="dropdown-item" href="javascript:void(0);" onclick="setTheme('auto')"><i data-feather="monitor" class="me-2"></i> Auto (OS Default)</a>
+                    </div>
+                </li>
+                <!-- User Dropdown-->
+                <li class="nav-item dropdown no-caret dropdown-user me-3 me-lg-4">
+                    <a class="btn btn-icon btn-transparent-dark dropdown-toggle" id="navbarDropdownUserImage" href="javascript:void(0);" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><img class="img-fluid" src="{{ asset('static/budget_app/assets/img/illustrations/profiles/profile-2.png') }}" /></a>
+                    <div class="dropdown-menu dropdown-menu-end border-0 shadow animated--fade-in-up" aria-labelledby="navbarDropdownUserImage">
+                        <h6 class="dropdown-header d-flex align-items-center">
+                            <img class="dropdown-user-img" src="{{ asset('static/budget_app/assets/img/illustrations/profiles/profile-2.png') }}" />
+                            <div class="dropdown-user-details">
+                                <div class="dropdown-user-details-name">{{ Auth::user()->first_name ?? '' }} {{ Auth::user()->last_name ?? '' }}</div>
+                                <div class="dropdown-user-details-email">{{ Auth::user()->username ?? '' }}</div>
+                            </div>
+                        </h6>
+                        <div class="dropdown-divider"></div>
+                        <form id="logoutForm" method="post" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="button" onclick="confirmLogout()" class="dropdown-item" style="border: none; background: none; width: 100%; text-align: left;">
+                                <div class="dropdown-item-icon"><i data-feather="log-out"></i></div>
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                </li>
+            </ul>
+        </nav>
+        <div id="layoutSidenav">
+            <div id="layoutSidenav_nav">
+                <nav class="sidenav shadow-right sidenav-light">
+                    <div class="sidenav-menu d-flex flex-column justify-content-between">
+                        <div class="nav accordion flex-grow-1" id="accordionSidenav">
+        <!-- Sidenav Menu Heading (Core)-->
+        <div class="sidenav-menu-heading">E-Budget</div>
+
+        @if($can_access_dashboard)
+        <a class="nav-link {{ request()->routeIs('budget_dashboard') ? 'active' : '' }}" href="{{ route('budget_dashboard') }}">
+            <div class="nav-link-icon"><i data-feather="bar-chart-2"></i></div>
+            Dashboard
+        </a>
+        @endif
+        
+        <a class="nav-link {{ request()->routeIs('budget_list') ? 'active' : '' }}" href="{{ route('budget_list') }}">
+            <div class="nav-link-icon"><i data-feather="list"></i></div>
+            Budget List
+        </a>
+        
+        @if($can_add_budget)
+        @php
+            $isAddActive = request()->routeIs('budget_add*');
+            $isManpowerActive = request()->routeIs('budget_add', 'budget_add_non_vet', 'budget_add_adjustment');
+            $isFixAssetActive = request()->routeIs('budget_add_medical_equipment', 'budget_add_computer_equipment', 'budget_add_furniture', 'budget_add_tools_equipment', 'budget_add_car', 'budget_add_renovate', 'budget_add_software');
+            $isGlActive = request()->routeIs('budget_add_gl_entry', 'budget_add_revenue', 'budget_add_budget_plan', 'budget_add_gl_actual_template');
+        @endphp
+        <a id="addBudgetToggle" class="nav-link {{ $isAddActive ? '' : 'collapsed' }}" href="javascript:void(0);" aria-expanded="{{ $isAddActive ? 'true' : 'false' }}" aria-controls="collapseAddBudget">
+            <div class="nav-link-icon"><i data-feather="plus-circle"></i></div>
+            Add Budget
+            <div class="sidenav-collapse-arrow"><i data-feather="chevron-down"></i></div>
+        </a>
+        <div class="eb-collapse {{ $isAddActive ? 'eb-collapse-open' : '' }}" id="collapseAddBudget">
+            <div>
+            <nav class="sidenav-menu-nested nav">
+                <a id="manpowerGroupToggle" class="nav-link px-3 py-2 small fw-bold text-warning text-uppercase {{ $isManpowerActive ? '' : 'collapsed' }}" href="javascript:void(0);" aria-expanded="{{ $isManpowerActive ? 'true' : 'false' }}" aria-controls="collapseManpowerGroup">
+                    Manpower
+                    <div class="sidenav-collapse-arrow"><i data-feather="chevron-down" style="width: 14px; height: 14px;"></i></div>
+                </a>
+                <div class="eb-collapse {{ $isManpowerActive ? 'eb-collapse-open' : '' }}" id="collapseManpowerGroup">
+                <div>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add') ? 'active' : '' }}" href="{{ route('budget_add') }}">VET Manpower</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_non_vet') ? 'active' : '' }}" href="{{ route('budget_add_non_vet') }}">NON VET Manpower</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_adjustment') ? 'active' : '' }}" href="{{ route('budget_add_adjustment') }}">Position Adjustment</a>
+                </div>
+                </div>
+
+                <a id="otherExpensesGroupToggle" class="nav-link px-3 py-2 mt-2 small fw-bold text-success text-uppercase {{ $isFixAssetActive ? '' : 'collapsed' }}" href="javascript:void(0);" aria-expanded="{{ $isFixAssetActive ? 'true' : 'false' }}" aria-controls="collapseOtherExpensesGroup">
+                    Fix Asset
+                    <div class="sidenav-collapse-arrow"><i data-feather="chevron-down" style="width: 14px; height: 14px;"></i></div>
+                </a>
+                <div class="eb-collapse {{ $isFixAssetActive ? 'eb-collapse-open' : '' }}" id="collapseOtherExpensesGroup">
+                <div>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_medical_equipment') ? 'active' : '' }}" href="{{ route('budget_add_medical_equipment') }}">Medical Equipment</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_computer_equipment') ? 'active' : '' }}" href="{{ route('budget_add_computer_equipment') }}">Computer Equipment</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_furniture') ? 'active' : '' }}" href="{{ route('budget_add_furniture') }}">Furniture</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_tools_equipment') ? 'active' : '' }}" href="{{ route('budget_add_tools_equipment') }}">Tools & Equipment</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_car') ? 'active' : '' }}" href="{{ route('budget_add_car') }}">CAR</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_renovate') ? 'active' : '' }}" href="{{ route('budget_add_renovate') }}">Renovate</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_software') ? 'active' : '' }}" href="{{ route('budget_add_software') }}">Software</a>
+                </div>
+                </div>
+
+                <a id="generalLedgerGroupToggle" class="nav-link px-3 py-2 mt-2 small fw-bold text-danger text-uppercase {{ $isGlActive ? '' : 'collapsed' }}" href="javascript:void(0);" aria-expanded="{{ $isGlActive ? 'true' : 'false' }}" aria-controls="collapseGeneralLedgerGroup">
+                    OTHER EXPENSE
+                    <div class="sidenav-collapse-arrow"><i data-feather="chevron-down" style="width: 14px; height: 14px;"></i></div>
+                </a>
+                <div class="eb-collapse {{ $isGlActive ? 'eb-collapse-open' : '' }}" id="collapseGeneralLedgerGroup">
+                <div>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_gl_entry') ? 'active' : '' }}" href="{{ route('budget_add_gl_entry') }}">EXPENSE</a>
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_revenue') ? 'active' : '' }}" href="{{ route('budget_add_revenue') }}">Revenue</a>
+                @if($can_access_gl_actual_template)
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_gl_actual_template') ? 'active' : '' }}" href="{{ route('budget_add_gl_actual_template') }}">GL Actual Template</a>
+                @endif
+                {{-- Budget Plan - Back Office hidden from the sidebar for now (requested); page/route/code left intact, still reachable by direct URL. --}}
+                {{-- 
+                <a class="nav-link ps-4 {{ request()->routeIs('budget_add_budget_plan') ? 'active' : '' }}" href="{{ route('budget_add_budget_plan') }}">Budget Plan - Back Office (แผนงบประมาณประจำปี)</a>
+                 --}}
+                </div>
+                </div>
+            </nav>
+            </div>
+        </div>
+        @endif
+    </div>
+    <!-- Sidenav Footer-->
+                    <div class="sidenav-footer">
+                        <div class="sidenav-footer-content">
+                            <div class="sidenav-footer-subtitle">Logged in as:</div>
+                            <div class="sidenav-footer-title">{{ Auth::user()->first_name ?? '' }} {{ Auth::user()->last_name ?? '' }}</div>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+            <div id="layoutSidenav_content">
+                <main>@yield('content')</main>
+                <footer class="footer-admin mt-auto footer-light">
+                    <div class="container-fluid px-4">
+                        <div class="row">
+                            <div class="col-md-12 text-center small">Copyright &copy; E-Budget {{ date('Y') }}</div>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        <script src="{{ asset('static/budget_app/js/scripts.js') }}?v=20261120_01"></script>
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const themeIcon = document.getElementById('themeToggleIcon');
+                
+                const updateTheme = (theme) => {
+                    let activeTheme = theme;
+                    if (theme === 'auto') {
+                        activeTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    }
+                    
+                    if (activeTheme === 'dark') {
+                        document.body.classList.add('theme-dark');
+                        document.body.classList.remove('theme-flat');
+                        if (themeIcon) themeIcon.setAttribute('data-feather', 'moon');
+                    } else if (theme === 'flat') {
+                        document.body.classList.remove('theme-dark');
+                        document.body.classList.add('theme-flat');
+                        if (themeIcon) themeIcon.setAttribute('data-feather', 'droplet');
+                    } else {
+                        document.body.classList.remove('theme-dark');
+                        document.body.classList.remove('theme-flat');
+                        if (themeIcon) themeIcon.setAttribute('data-feather', 'sun');
+                    }
+                    if (typeof feather !== 'undefined') {
+                        feather.replace();
+                    }
+                };
+
+                window.setTheme = (theme) => {
+                    localStorage.setItem('app-theme', theme);
+                    updateTheme(theme);
+                };
+                
+                const savedTheme = localStorage.getItem('app-theme') || 'auto';
+                updateTheme(savedTheme);
+
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                    if (localStorage.getItem('app-theme') === 'auto') updateTheme('auto');
+                });
+
+                // Sidenav collapse (used by "Add Budget" and its Manpower/Other
+                // Expenses/General Ledger sub-groups): deliberately NOT using
+                // Bootstrap's data-bs-toggle="collapse" here.
+                function bindSidenavCollapseToggle(toggleId, panelId) {
+                    const toggle = document.getElementById(toggleId);
+                    const panel = document.getElementById(panelId);
+                    if (!toggle || !panel) return;
+                    toggle.addEventListener('click', () => {
+                        const isOpen = panel.classList.toggle('eb-collapse-open');
+                        toggle.classList.toggle('collapsed', !isOpen);
+                        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                    });
+                }
+                bindSidenavCollapseToggle('addBudgetToggle', 'collapseAddBudget');
+                bindSidenavCollapseToggle('manpowerGroupToggle', 'collapseManpowerGroup');
+                bindSidenavCollapseToggle('otherExpensesGroupToggle', 'collapseOtherExpensesGroup');
+                bindSidenavCollapseToggle('generalLedgerGroupToggle', 'collapseGeneralLedgerGroup');
+            });
+
+            function confirmLogout() {
+                Swal.fire({
+                    title: 'ยืนยันการออกจากระบบ?',
+                    text: "คุณต้องการออกจากระบบใช่หรือไม่?",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#0061f2',
+                    cancelButtonColor: '#e81500',
+                    confirmButtonText: 'ยืนยัน',
+                    cancelButtonText: 'ยกเลิก'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        document.getElementById('logoutForm').submit();
+                    }
+                });
+            }
+
+            // Inactivity timeout: If there is no user activity on the page for 2 hours (SESSION_COOKIE_AGE),
+            // display a SweetAlert popup alerting that the session expired and require re-login.
+            // When the user is active, periodically send a lightweight heartbeat ping to refresh
+            // Django's server-side session timer so active work in forms/tables is never interrupted.
+            (function() {
+                if (document.body.dataset.authenticated !== 'true') return;
+
+                const IDLE_TIMEOUT_SECONDS = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 7200;
+                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
+                const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // Heartbeat every 10 min of active use
+                const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+
+                let lastActivityTime = Date.now();
+                let lastHeartbeatTime = Date.now();
+                let sessionExpiredModalShown = false;
+                let activityThrottled = false;
+
+                function showSessionExpiredModal() {
+                    if (sessionExpiredModalShown) return;
+                    sessionExpiredModalShown = true;
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'เซสชันหมดอายุ',
+                        text: 'คุณไม่ได้ใช้งานระบบเป็นเวลาเกิน 2 ชั่วโมง เซสชันการเข้าใช้งานหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+                        confirmButtonText: 'เข้าสู่ระบบ',
+                        confirmButtonColor: '#0061f2',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false
+                    }).then(() => {
+                        window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                    });
+                }
+
+                function checkIdleTimeout() {
+                    if (sessionExpiredModalShown) return;
+                    const idleTime = Date.now() - lastActivityTime;
+                    if (idleTime >= IDLE_TIMEOUT_MS) {
+                        showSessionExpiredModal();
+                    }
+                }
+
+                function sendKeepalivePing() {
+                    if (sessionExpiredModalShown) return;
+                    lastHeartbeatTime = Date.now();
+                    fetch('/api/session/keepalive/', {
+                        method: 'GET',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    }).then(res => {
+                        if (res.status === 401 || (res.redirected && res.url && res.url.includes('/login'))) {
+                            showSessionExpiredModal();
+                        }
+                    }).catch(() => {});
+                }
+
+                function onUserActivity() {
+                    if (sessionExpiredModalShown) return;
+                    lastActivityTime = Date.now();
+
+                    if (activityThrottled) return;
+                    activityThrottled = true;
+                    setTimeout(() => { activityThrottled = false; }, 1000);
+
+                    if (Date.now() - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS) {
+                        sendKeepalivePing();
+                    }
+                }
+
+                ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, onUserActivity, { passive: true }));
+                setInterval(checkIdleTimeout, 15000);
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) checkIdleTimeout();
+                });
+                window.addEventListener('focus', checkIdleTimeout);
+            })();
+
+            @if(session('info') || session('status') || session('notice'))
+            // One-time notice for a non-privileged user logging in while the
+            // system is frozen — Laravel flash session clears after reading.
+            document.addEventListener('DOMContentLoaded', () => {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'แจ้งเตือน: ระบบอยู่ระหว่างปิดงบประมาณ',
+                    text: {!! json_encode(session('info') ?? session('status') ?? session('notice')) !!},
+                    confirmButtonText: 'รับทราบ',
+                    confirmButtonColor: '#0061f2',
+                });
+            });
+            @endif
+
+            // System freeze + active budget year — both privileged-only
+            // writes, enforced server-side (see budget_app/decorators.py);
+            // this JS is purely the UI for triggering those two actions.
+            // While frozen, non-privileged users just lose the "Add Budget"
+            // menu (see the is_privileged_user-or-not-system_frozen guard
+            // around it above) — they can still browse Budget List and view
+            // document details, so there's no page-blocking modal here.
+            // Reads its config from data-* attributes on <body> (set
+            // server-side), same convention as the idle-timeout block above.
+            (function() {
+                const body = document.body;
+                const systemFrozen = body.dataset.systemFrozen === 'true';
+                const csrfToken = body.dataset.csrfToken;
+
+                function submitFreezeToggle(message) {
+                    fetch(body.dataset.toggleFreezeUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ message: message || '' })
+                    })
+                    .then(r => window.handleFetchApiResponse(r))
+                    .then(data => {
+                        if (data && data.status === 'success') {
+                            window.location.reload();
+                        } else if (data) {
+                            Swal.fire('ข้อผิดพลาด', data.message || 'ไม่สามารถดำเนินการได้', 'error');
+                        }
+                    })
+                    .catch(window.handleFetchApiError);
+                }
+
+                window.handleFreezeToggle = function() {
+                    if (systemFrozen) {
+                        Swal.fire({
+                            title: 'ปลด Freeze ระบบ?',
+                            text: 'ผู้ใช้ทั่วไปจะกลับมาใช้งานระบบได้ตามปกติ',
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonColor: '#0061f2',
+                            cancelButtonColor: '#e81500',
+                            confirmButtonText: 'ยืนยัน',
+                            cancelButtonText: 'ยกเลิก'
+                        }).then((result) => {
+                            if (result.isConfirmed) submitFreezeToggle(null);
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Freeze ระบบ (ปิดงบประมาณ)?',
+                            html: '<p class="text-start mb-2">ผู้ใช้ทั่วไปจะไม่สามารถใช้งานระบบได้จนกว่าจะปลด Freeze</p><p class="text-start mb-1">ข้อความที่จะแสดง (แก้ไขได้):</p>',
+                            input: 'textarea',
+                            inputValue: body.dataset.frozenMessage,
+                            inputAttributes: { style: 'height: 100px;' },
+                            showCancelButton: true,
+                            confirmButtonColor: '#e81500',
+                            cancelButtonColor: '#6c757d',
+                            confirmButtonText: 'ยืนยัน Freeze',
+                            cancelButtonText: 'ยกเลิก'
+                        }).then((result) => {
+                            if (result.isConfirmed) submitFreezeToggle(result.value);
+                        });
+                    }
+                };
+
+                function submitActiveYear(year) {
+                    fetch(body.dataset.setYearUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ year: year })
+                    })
+                    .then(r => window.handleFetchApiResponse(r))
+                    .then(data => {
+                        if (data && data.status === 'success') {
+                            window.location.reload();
+                        } else if (data) {
+                            Swal.fire('ข้อผิดพลาด', data.message || 'ไม่สามารถเปลี่ยนปีได้', 'error');
+                        }
+                    })
+                    .catch(window.handleFetchApiError);
+                }
+
+                document.addEventListener('DOMContentLoaded', () => {
+                    const activeBudgetYear = parseInt(body.dataset.activeBudgetYear, 10);
+                    document.querySelectorAll('.budget-year-option').forEach(el => {
+                        el.addEventListener('click', () => {
+                            const year = parseInt(el.dataset.year, 10);
+                            if (year === activeBudgetYear) return;
+                            Swal.fire({
+                                title: 'เปลี่ยนปีงบประมาณ?',
+                                text: `เปลี่ยนเป็นปีงบประมาณ ${year} — ข้อมูลที่บันทึกใหม่ทุกหน้าจะถูกระบุเป็นปีนี้`,
+                                icon: 'question',
+                                showCancelButton: true,
+                                confirmButtonColor: '#0061f2',
+                                cancelButtonColor: '#e81500',
+                                confirmButtonText: 'ยืนยัน',
+                                cancelButtonText: 'ยกเลิก'
+                            }).then((result) => {
+                                if (result.isConfirmed) submitActiveYear(year);
+                            });
+                        });
+                    });
+                });
+            })();
+        </script>
+                <script>
+            window.handleFetchApiResponse = function(response) {
+                // Case 1: Browser followed 302 redirect to login HTML
+                if (response.redirected && response.url && response.url.includes('/login')) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'เซสชันหมดอายุ',
+                        text: 'เซสชันการเข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+                        confirmButtonText: 'เข้าสู่ระบบ',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false
+                    }).then(() => {
+                        window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                    });
+                    const err = new Error('SESSION_EXPIRED');
+                    err.handled = true;
+                    return Promise.reject(err);
+                }
+
+                // Case 2: Server returned 401 Unauthorized JSON
+                if (response.status === 401) {
+                    return response.json().catch(() => ({})).then(data => {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'เซสชันหมดอายุ',
+                            text: (data && data.message) ? data.message : 'เซสชันการเข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+                            confirmButtonText: 'เข้าสู่ระบบ',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false
+                        }).then(() => {
+                            window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                        });
+                        const err = new Error('SESSION_EXPIRED');
+                        err.handled = true;
+                        return Promise.reject(err);
+                    });
+                }
+
+                // Case 3: 403 Forbidden (e.g. view-only executive, revoked iMedX profile, CSRF)
+                if (response.status === 403) {
+                    return response.json().catch(() => null).then(data => {
+                        const msg = (data && data.message) ? data.message : 'ท่านไม่มีสิทธิ์ดำเนินการในส่วนนี้ หรือเซสชันหมดอายุ';
+                        Swal.fire('ข้อผิดพลาด', msg, 'error');
+                        const err = new Error(msg);
+                        err.handled = true;
+                        return Promise.reject(err);
+                    });
+                }
+
+                // Case 4: Server error (HTTP 500, 502, 504, etc.)
+                if (!response.ok) {
+                    return response.json().catch(() => null).then(data => {
+                        const msg = (data && data.message) ? data.message : `เซิร์ฟเวอร์ตอบกลับด้วยรหัสข้อผิดพลาด (HTTP ${response.status})`;
+                        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้: ' + msg, 'error');
+                        const err = new Error(msg);
+                        err.handled = true;
+                        return Promise.reject(err);
+                    });
+                }
+
+                // Case 5: 200 OK -> parse JSON
+                return response.json();
+            };
+
+            window.handleFetchApiError = function(error) {
+                if (error && (error.handled || error.message === 'SESSION_EXPIRED')) {
+                    return;
+                }
+                console.error('Fetch API error:', error);
+                const msg = (error && error.message && error.message !== 'Failed to fetch') 
+                    ? error.message 
+                    : 'เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย หรือเซิร์ฟเวอร์ไม่ตอบสนอง';
+                Swal.fire('ข้อผิดพลาด', msg, 'error');
+            };
+
+            window.handleBudgetSaveDuplicateResponse = function(data, budgetListUrl) {
+                const escapeHtml = function(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+                const docType = escapeHtml(data.doc_type || 'งบประมาณ');
+                const docNo = escapeHtml(data.document_no || '-');
+                const budgetYear = escapeHtml(String(data.budget_year || ''));
+                const branchId = escapeHtml(String(data.branch_id || ''));
+                const costCenterName = escapeHtml(String(data.cost_center_name || ''));
+
+                const costCenterBadge = costCenterName ? ` Cost Center <strong>${costCenterName}</strong>` : '';
+                const costCenterRow = costCenterName ? `
+                    <div class="mt-1 pt-1 border-top border-light">
+                        <span class="text-muted small">Cost Center:</span>
+                        <strong class="text-secondary small ms-1">${costCenterName}</strong>
+                    </div>
+                ` : '';
+
+                const htmlContent = `
+                    <div class="text-start" style="font-size: 0.95rem; line-height: 1.6;">
+                        <p class="mb-2">
+                            ระบบตรวจพบว่ามีเอกสารงบประมาณประเภท <strong>${docType}</strong> 
+                            ประจำปี <strong>${budgetYear}</strong> 
+                            ของสาขา <strong>${branchId}</strong>${costCenterBadge} บันทึกอยู่ในระบบแล้ว
+                        </p>
+                        <div class="alert alert-info py-2 px-3 mb-3">
+                            <div class="d-flex align-items-center">
+                                <i data-feather="file-text" class="feather icon-file-text f-20 me-2 text-primary" style="width:20px;height:20px;min-width:20px;"></i>
+                                <div>
+                                    <span class="text-muted d-block small">เลขที่เอกสารในระบบ:</span>
+                                    <strong class="text-primary" style="font-size: 1.05rem;">${docNo}</strong>
+                                </div>
+                            </div>
+                            ${costCenterRow}
+                        </div>
+                        <p class="text-muted small mb-0">
+                            เพื่อป้องกันข้อมูลซ้ำซ้อน ท่านสามารถกดปุ่ม <strong>"ดูรายละเอียดเอกสาร"</strong> เพื่อตรวจสอบหรือปรับปรุงเอกสารดังกล่าวได้ทันที
+                        </p>
+                    </div>
+                `;
+
+                const swalInstance = (typeof Swal !== 'undefined' && Swal.mixin) ? Swal.mixin({ heightAuto: false }) : Swal;
+                swalInstance.fire({
+                    icon: 'warning',
+                    title: 'พบรายการงบประมาณนี้ในระบบแล้ว',
+                    html: htmlContent,
+                    showCancelButton: true,
+                    confirmButtonColor: '#0061f2',
+                    cancelButtonColor: '#69707a',
+                    confirmButtonText: '<i class="feather icon-eye me-1"></i> ดูรายละเอียดเอกสาร',
+                    cancelButtonText: 'ปิดหน้าต่าง',
+                    didOpen: () => {
+                        if (typeof feather !== 'undefined') feather.replace();
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const targetUrl = budgetListUrl + 
+                            (budgetListUrl.includes('?') ? '&' : '?') + 
+                            'open_doc_no=' + encodeURIComponent(data.document_no || '') + 
+                            '&open_doc_type=' + encodeURIComponent(data.doc_type || '');
+                        window.location.href = targetUrl;
+                    }
+                });
+            };
+            window.checkDuplicateBeforeSave = function(options) {
+                const docType = options.docType || '';
+                const branchCode = options.branchCode || '';
+                const costCenterName = options.costCenterName || '';
+                const checkUrl = options.checkUrl;
+                const budgetListUrl = options.budgetListUrl;
+                const onProceed = options.onProceed;
+
+                if (!checkUrl) {
+                    if (typeof onProceed === 'function') onProceed();
+                    return;
+                }
+
+                const url = checkUrl + 
+                    (checkUrl.includes('?') ? '&' : '?') + 
+                    'doc_type=' + encodeURIComponent(docType) + 
+                    '&branch_code=' + encodeURIComponent(branchCode) + 
+                    '&cost_center=' + encodeURIComponent(costCenterName);
+
+                fetch(url)
+                    .then(function(res) {
+                        if (res.status === 401 || (res.redirected && res.url && res.url.includes('/login'))) {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'เซสชันหมดอายุ',
+                                text: 'เซสชันการเข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+                                confirmButtonText: 'เข้าสู่ระบบ',
+                                allowOutsideClick: false,
+                                allowEscapeKey: false
+                            }).then(() => {
+                                window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                            });
+                            const err = new Error('SESSION_EXPIRED');
+                            err.handled = true;
+                            throw err;
+                        }
+                        return res.json();
+                    })
+                    .then(function(data) {
+                        if (data && data.status === 'duplicate') {
+                            window.handleBudgetSaveDuplicateResponse(data, budgetListUrl);
+                        } else {
+                            if (typeof onProceed === 'function') onProceed();
+                        }
+                    })
+                    .catch(function(err) {
+                        if (err && (err.handled || err.message === 'SESSION_EXPIRED')) return;
+                        console.error('Error pre-checking duplicate budget document:', err);
+                        if (typeof onProceed === 'function') onProceed();
+                    });
+            };
+
+            window.showZeroMonthlyRowsWarning = function(emptyRows) {
+                const escapeHtml = function(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+
+                const rowListHtml = emptyRows.map(function(r) {
+                    const itemName = escapeHtml(r.name);
+                    const descStr = r.desc ? ` <span class="text-muted fw-normal">(รายละเอียด: "${escapeHtml(r.desc)}")</span>` : '';
+                    return `<li>แถวที่ ${r.rowNumber}: <strong>${itemName}</strong>${descStr}</li>`;
+                }).join('');
+
+                const swalInstance = (typeof Swal !== 'undefined' && Swal.mixin) ? Swal.mixin({ heightAuto: false }) : Swal;
+                swalInstance.fire({
+                    icon: 'warning',
+                    title: 'กรุณาระบุจำนวนในตารางส่วนแรก',
+                    html: `
+                        <div class="text-start" style="font-size: 0.95rem; line-height: 1.6;">
+                            <p class="mb-2">
+                                ระบบตรวจพบว่ามีรายการที่<strong>ยังไม่ได้ระบุจำนวนของทุกเดือน</strong> (ค่าว่าง หรือเป็น 0 ทั้งหมด) ในตารางส่วนแรก กรุณาระบุจำนวนอย่างน้อย 1 เดือนก่อนทำการบันทึกข้อมูล:
+                            </p>
+                            <div class="alert alert-light border border-warning py-2 px-3 mb-2" style="max-height: 250px; overflow-y: auto;">
+                                <ul class="mb-0 text-danger" style="padding-left: 1.25rem;">
+                                    ${rowListHtml}
+                                </ul>
+                            </div>
+                            <p class="text-muted small mb-0">
+                                * หากไม่ต้องการบันทึกรายการดังกล่าว สามารถลบแถวออกจากตารางได้ครับ
+                            </p>
+                        </div>
+                    `,
+                    confirmButtonText: 'ตกลง',
+                    confirmButtonColor: '#0061f2'
+                });
+            };
+            window.showDuplicateFixAssetRowsWarning = function(duplicateGroups, itemColLabel) {
+                const escapeHtml = function(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+
+                const colLabel = (itemColLabel && String(itemColLabel).trim()) ? String(itemColLabel).trim() : 'เครื่องมือ';
+
+                const listItemsHtml = duplicateGroups.map(function(group) {
+                    const itemName = escapeHtml(group.name);
+                    const descStr = group.desc ? `<strong class="text-dark">"${escapeHtml(group.desc)}"</strong>` : '<span class="text-muted">(ไม่มีรายละเอียด / ค่าว่าง)</span>';
+                    const rowsStr = group.rowNumbers.map(n => `แถวที่ ${n}`).join(', ');
+                    return `
+                        <li class="mb-2 pb-2 border-bottom border-light">
+                            <div><span class="text-secondary small fw-bold">${escapeHtml(colLabel)}:</span> <strong class="text-primary">${itemName}</strong></div>
+                            <div><span class="text-secondary small fw-bold">รายละเอียด:</span> ${descStr}</div>
+                            <div class="mt-1"><span class="badge bg-danger text-white"><i class="feather icon-alert-circle me-1"></i>ซ้ำกันใน ${escapeHtml(rowsStr)}</span></div>
+                        </li>
+                    `;
+                }).join('');
+
+                const swalInstance = (typeof Swal !== 'undefined' && Swal.mixin) ? Swal.mixin({ heightAuto: false }) : Swal;
+                swalInstance.fire({
+                    icon: 'warning',
+                    title: 'พบรายการข้อมูลซ้ำซ้อนในตาราง',
+                    html: `
+                        <div class="text-start" style="font-size: 0.95rem; line-height: 1.6;">
+                            <p class="mb-2">
+                                ระบบตรวจพบว่ามีการระบุข้อมูล <strong>${escapeHtml(colLabel)}</strong> และ <strong>รายละเอียด</strong> ซ้ำกันในตาราง กรุณาตรวจสอบและปรับปรุงข้อมูลให้ไม่ซ้ำซ้อนกันก่อนทำการบันทึก:
+                            </p>
+                            <div class="alert alert-light border border-warning py-2 px-3 mb-2" style="max-height: 250px; overflow-y: auto;">
+                                <ul class="list-unstyled mb-0" style="padding-left: 0;">
+                                    ${listItemsHtml}
+                                </ul>
+                            </div>
+                            <p class="text-muted small mb-0">
+                                * หากเป็นรายการเดียวกันสำหรับใช้งานคนละวัตถุประสงค์ กรุณาระบุรายละเอียดเพิ่มเติมให้แตกต่างกัน หรือรวมจำนวนเข้าด้วยกันในแถวเดียวครับ
+                            </p>
+                        </div>
+                    `,
+                    confirmButtonText: 'ตกลง',
+                    confirmButtonColor: '#0061f2'
+                });
+            };
+
+        </script>
+        @yield('extra_js')
+    </body>
+</html>

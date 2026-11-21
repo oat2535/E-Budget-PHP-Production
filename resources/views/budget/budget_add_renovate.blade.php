@@ -1,0 +1,731 @@
+@extends('layouts.app')
+
+
+@section('title', 'Add Budget - Renovate')
+
+@section('extra_css')
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jexcel/jexcel.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/jsuites/jsuites.css') }}" type="text/css" />
+<link rel="stylesheet" href="{{ asset('static/budget_app/vendor/tom-select/tom-select.bootstrap5.min.css') }}">
+<style>
+    .jexcel_container {
+        width: 100%;
+        max-width: 100%;
+    }
+    .jexcel_content {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .jexcel {
+        width: 100% !important;
+    }
+    .card-body {
+        overflow: hidden;
+    }
+    /* The blanket rule above contains the jspreadsheet grid, but it also
+       clips the Cost Center / branch dropdowns' floating option lists
+       (absolutely positioned children that need to escape their card to
+       render fully). */
+    #cost-center-card-body {
+        overflow: visible;
+    }
+    .jexcel tbody tr td {
+        vertical-align: middle;
+    }
+    /* jspreadsheet mounts into these after DOMContentLoaded, growing them
+       from 0 height and shifting everything below — reserve the rendered
+       height (1 header row + 1 data row) up front to avoid that layout shift. */
+    #spreadsheet, #calc-spreadsheet {
+        min-height: 68px;
+    }
+    /* The plain <select> renders taller than the TomSelect control that
+       replaces it after DOMContentLoaded — match its height up front so
+       swapping to TomSelect doesn't shrink the card and shift the page. */
+    #cost-center-select {
+        height: 35px;
+    }
+    /* Text/dropdown columns are set to align:'left' on their column
+       definition (see budget_list.js / this page's inline <script>) so
+       their cell content reads left-aligned — but jexcel ties a column's
+       header alignment to the same `align` property, so without this the
+       header text would also shift left. jexcel sets header alignment as
+       a plain (non-!important) inline style, so this cheaply overrides it
+       back to centered without touching the data cells below. */
+    .jexcel > thead > tr > td {
+        text-align: center !important;
+    }
+</style>
+@endsection
+
+@section('content')
+<header class="page-header page-header-dark bg-gradient-primary-to-secondary pb-10">
+    <div class="container-fluid px-4">
+        <div class="page-header-content pt-4">
+            <div class="row align-items-center justify-content-between">
+                <div class="col-auto mt-4">
+                    <h1 class="page-header-title">
+                        <div class="page-header-icon"><i data-feather="home"></i></div>
+                        Renovate (ปรับปรุง)
+                    </h1>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="container-fluid px-4 mt-n10">
+    <div class="card mb-4 shadow-sm border-0 card-soft eb-cost-center-card">
+        <div class="card-body" id="cost-center-card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="cost-center-select" class="form-label fw-500">Cost Center <span class="text-danger">*</span></label>
+                    <select id="cost-center-select" class="form-select" placeholder="-- เลือก Cost Center --"></select>
+                </div>
+                @if($needs_branch_selection)
+                <div class="col-md-6">
+                    <label for="branch-select" class="form-label fw-500">สาขา <span class="text-danger">*</span></label>
+                    <select id="branch-select" class="form-select" placeholder="-- เลือกสาขา --"></select>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0 card-soft">
+        <div class="card-header d-flex justify-content-between align-items-center bg-white py-3 eb-sticky-header">
+            <h6 class="m-0 font-weight-bold text-primary">ตารางส่วนแรก (กรอกจำนวน)</h6>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{{ route('budget_list') }}" class="btn btn-sm btn-outline-secondary shadow-xs fw-500" style="min-width: 90px;"><i data-feather="arrow-left" class="me-1"></i> กลับ</a>
+                <button id="add-row-btn" class="btn btn-sm btn-primary shadow-xs fw-500"><i data-feather="plus" class="me-1"></i> เพิ่มรายการ</button>
+                <button id="save-budget-btn" class="btn btn-sm btn-success shadow-xs fw-500" style="min-width: 95px;"><i data-feather="save" class="me-1"></i> บันทึก</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="spreadsheet"></div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0 card-soft">
+        <div class="card-header bg-white py-3">
+            <h6 class="m-0 font-weight-bold text-success">ตารางส่วนที่สอง (คำนวณค่าเสื่อม)</h6>
+        </div>
+        <div class="card-body p-0">
+            <div id="calc-spreadsheet"></div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@section('extra_js')
+<script src="{{ asset('static/budget_app/vendor/jexcel/jexcel.js') }}"></script>
+<script src="{{ asset('static/budget_app/vendor/jsuites/jsuites.js') }}"></script>
+<script defer src="{{ asset('static/budget_app/vendor/tom-select/tom-select.complete.min.js') }}"></script>
+
+<script id="items-data" type="application/json">{!! json_encode($items_json ?? []) !!}</script>
+<script id="cost-centers-data" type="application/json">{!! json_encode($cost_centers_json ?? []) !!}</script>
+<script id="branch-options-data" type="application/json">{!! json_encode($branch_options_json ?? []) !!}</script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const items = JSON.parse(document.getElementById('items-data').textContent);
+
+        // Preserves master item order (id ASC) loaded from the database
+        const itemNames = items.map(i => i.name);
+
+        const getSalary = (name) => {
+            const match = items.find(i => i.name === name);
+            return match ? match.purchase_price : 0;
+        };
+
+        // Datalist for renovate suggestions: allows free static text while
+        // still presenting autocomplete suggestions from item master.
+        const renovateDatalist = document.createElement('datalist');
+        renovateDatalist.id = 'renovate-item-datalist';
+        itemNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            renovateDatalist.appendChild(opt);
+        });
+        document.body.appendChild(renovateDatalist);
+
+        const renovateEditor = {
+            createCell: function(cell) {
+                cell.classList.add('eb-dropdown-cell');
+                return cell;
+            },
+            updateCell: function(cell, value, force) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+                return value;
+            },
+            setValue: function(cell, value) {
+                cell.classList.add('eb-dropdown-cell');
+                cell.innerText = value || '';
+            },
+            openEditor: function(cell, el, empty, def) {
+                const rect = cell.getBoundingClientRect();
+                const input = document.createElement('input');
+                input.setAttribute('list', 'renovate-item-datalist');
+                input.className = 'jexcel_editor eb-dropdown-input';
+                input.style.width = rect.width + 'px';
+                input.style.height = (rect.height - 2) + 'px';
+                input.style.minHeight = (rect.height - 2) + 'px';
+                input.style.boxSizing = 'border-box';
+                input.style.border = 'none';
+                input.style.outline = 'none';
+                input.style.padding = '0 4px';
+                input.style.font = 'inherit';
+
+                const y = parseInt(cell.getAttribute('data-y') || 0);
+                const currentValue = (table1 && typeof table1.getValueFromCoords === 'function')
+                    ? (table1.getValueFromCoords(0, y) || '')
+                    : (cell.innerText || '');
+                input.value = empty ? '' : currentValue;
+
+                cell.classList.add('editor');
+                cell.innerHTML = '';
+                cell.appendChild(input);
+                input.focus();
+
+                try {
+                    if (typeof input.showPicker === 'function') {
+                        input.showPicker();
+                    }
+                } catch (e) {}
+
+                input.onkeydown = function(e) {
+                    if (e.which === 13 || e.key === 'Enter') {
+                        if (table1 && table1.edition) table1.closeEditor(cell, true);
+                        setTimeout(syncTableRows, 0);
+                    } else if (e.which === 27 || e.key === 'Escape') {
+                        if (table1 && table1.edition) table1.closeEditor(cell, false);
+                    }
+                };
+
+                input.onchange = function() {
+                    if (table1 && table1.edition) table1.closeEditor(cell, true);
+                };
+
+                input.onblur = function() {
+                    if (table1 && table1.edition) table1.closeEditor(cell, true);
+                };
+            },
+            closeEditor: function(cell, save) {
+                const input = cell.querySelector('input');
+                return input ? input.value.trim() : (cell.innerText || '').trim();
+            }
+        };
+
+        // Cost center select: chosen once for the whole document, stamped
+        // onto every row on save (not a per-row jspreadsheet column).
+        const costCenters = JSON.parse(document.getElementById('cost-centers-data').textContent);
+        const costCenterSelect = document.getElementById('cost-center-select');
+        new TomSelect(costCenterSelect, {
+            options: costCenters.map(cc => ({ value: cc.cost_center_name, text: `${cc.cost_center_code}: ${cc.cost_center_name}` })),
+            valueField: 'value',
+            labelField: 'text',
+            searchField: ['text', 'value'],
+            create: false,
+            placeholder: '-- เลือก Cost Center --',
+        });
+
+        // Branch select: only present when the user belongs to more than
+        // one branch (see get_branch_selection_context in views.py) —
+        // stamped onto the document the same way cost center is.
+        const branchSelectEl = document.getElementById('branch-select');
+        if (branchSelectEl) {
+            const branchOptions = JSON.parse(document.getElementById('branch-options-data').textContent);
+            new TomSelect(branchSelectEl, {
+                options: branchOptions.map(b => ({ value: b.code, text: `${b.code} - ${b.name}` })),
+                valueField: 'value',
+                labelField: 'text',
+                searchField: ['text', 'value'],
+                create: false,
+                placeholder: '-- เลือกสาขา --',
+            });
+        }
+
+        // Columns definition
+        const columns = [
+            { type: 'text', align: 'left', title: 'ปรับปรุง', width: 250, editor: renovateEditor },
+            { type: 'text', align: 'left', title: 'รายละเอียด', width: 200 },
+            { type: 'numeric', title: 'ราคาซื้อ', width: 100, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 85 },
+            { type: 'numeric', title: 'Feb', width: 85 },
+            { type: 'numeric', title: 'Mar', width: 85 },
+            { type: 'numeric', title: 'Apr', width: 85 },
+            { type: 'numeric', title: 'May', width: 85 },
+            { type: 'numeric', title: 'Jun', width: 85 },
+            { type: 'numeric', title: 'Jul', width: 85 },
+            { type: 'numeric', title: 'Aug', width: 85 },
+            { type: 'numeric', title: 'Sep', width: 85 },
+            { type: 'numeric', title: 'Oct', width: 85 },
+            { type: 'numeric', title: 'Nov', width: 85 },
+            { type: 'numeric', title: 'Dec', width: 85 },
+            { type: 'numeric', title: 'รวม', width: 100, readOnly: true, mask: '#,##0' }
+        ];
+
+        const calcColumns = [
+            { type: 'text', align: 'left', title: 'ปรับปรุง', width: 250, readOnly: true },
+            { type: 'text', align: 'left', title: 'รายละเอียด', width: 200, readOnly: true },
+            { type: 'numeric', title: 'ราคาซื้อ', width: 100, readOnly: true, mask: '#,##0' },
+            { type: 'numeric', title: 'Jan', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Feb', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Mar', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Apr', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'May', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Jun', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Jul', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Aug', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Sep', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Oct', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Nov', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'Dec', width: 85, readOnly: true, mask: '#,##0.00' },
+            { type: 'numeric', title: 'รวม', width: 100, readOnly: true, mask: '#,##0.00' }
+        ];
+
+        let table1, table2;
+        let isUpdating = false;
+
+        const syncTableRows = function() {
+            if (!table1 || !table2) return;
+            const count1 = (table1.rows && table1.rows.length) || 0;
+            while (table2.rows.length < count1) {
+                table2.insertRow();
+            }
+            while (table2.rows.length > count1 && table2.rows.length > 1) {
+                table2.deleteRow(table2.rows.length - 1);
+            }
+        };
+
+        const getNum = (val) => parseFloat(String(val).replace(/,/g, '')) || 0;
+
+        const onchange = function(instance, cell, x, y, value) {
+            if (!table1 || !table2 || isUpdating) return;
+            isUpdating = true;
+
+            try {
+                x = parseInt(x);
+                y = parseInt(y);
+
+                // table1's row count can only get ahead of table2's through the
+                // oninsertrow hook below, which keeps them synced regardless of
+                // how the row was added — but guard here too in case a future
+                // jspreadsheet interaction (e.g. paste) still slips a row past it.
+                if (y >= table2.rows.length) {
+                    syncTableRows();
+                    if (y >= table2.rows.length) return;
+                }
+
+                // If item changed, update purchase price if found in master
+                if (x === 0) {
+                    const trimmedVal = (value || '').trim();
+                    if (trimmedVal !== '') {
+                        const match = items.find(i => i.name === trimmedVal);
+                        if (match) {
+                            const initPrice = (match.purchase_price >= 5000) ? match.purchase_price : '';
+                            table1.setValueFromCoords(2, y, initPrice, true);
+                        } else {
+                            table1.setValueFromCoords(0, y, '', true);
+                            table1.setValueFromCoords(2, y, 0, true);
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกรายการจาก Dropdown เท่านั้น ("${trimmedVal}" ไม่มีอยู่ในรายการตัวเลือก)`,
+                                timer: 3000,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                        }
+                    } else {
+                        table1.setValueFromCoords(2, y, 0, true);
+                    }
+                }
+
+                // Enforce minimum purchase price >= 5000 in Fix Asset (forbid < 5000 e.g. 4999 down)
+                if (x === 2) {
+                    const rawVal = String(value || '').trim();
+                    if (rawVal !== '') {
+                        const priceNum = parseFloat(rawVal.replace(/,/g, ''));
+                        if (!isNaN(priceNum) && priceNum < 5000) {
+                            table1.setValueFromCoords(2, y, '', false);
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: `ราคาซื้อในหมวดสินทรัพย์ถาวร (Fix Asset) ต้องมีมูลค่าตั้งแต่ 5,000 บาทขึ้นไป ไม่อนุญาตให้กรอกราคาตั้งแต่ 4,999 บาทลงมา (ระบุ: ${priceNum.toLocaleString()} บาท)`,
+                                timer: 3000,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                        }
+                    }
+                }
+
+                // Enforce integer จำนวน (digits only) without leading zeros in month columns (x = 3 to 14)
+                if (x >= 3 && x <= 14) {
+                    const rawVal = String(value !== null && value !== undefined ? value : '').trim();
+                    if (rawVal !== '') {
+                        const cleanStr = rawVal.replace(/,/g, '');
+                        const cleanDigits = cleanStr.replace(/[^0-9]/g, '');
+                        const hasNonDigits = cleanStr !== cleanDigits;
+                        const hasLeadingZero = /^0\d+/.test(cleanDigits);
+                        const num = parseFloat(cleanStr);
+                        const isDecimal = !isNaN(num) && !Number.isInteger(num);
+
+                        if (hasNonDigits || hasLeadingZero || isDecimal) {
+                            const finalDigits = cleanDigits.replace(/^0+(?=\d)/, '');
+                            const intVal = finalDigits !== '' ? parseInt(finalDigits, 10) : 0;
+                            table1.setValueFromCoords(x, y, intVal, false);
+                            let warnMsg = 'จำนวนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกตัวอักษรหรืออักขระพิเศษ';
+                            if (hasLeadingZero && !hasNonDigits && !isDecimal) {
+                                warnMsg = 'ไม่อนุญาตให้กรอกตัวเลขที่มี 0 นำหน้า (เช่น 03, 04) ระบบปรับเป็น ' + intVal + ' ให้เรียบร้อยแล้ว';
+                            } else if (isDecimal && !hasNonDigits && !hasLeadingZero) {
+                                warnMsg = 'จำนวนต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม';
+                            }
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'แจ้งเตือน',
+                                text: warnMsg,
+                                timer: 2500,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                        }
+                    }
+                }
+
+                // Calculate total for this row in table1
+                const rowData1 = table1.getRowData(y);
+                let sum1 = 0;
+                for(let i = 3; i <= 14; i++) {
+                    sum1 += getNum(rowData1[i]);
+                }
+                table1.setValueFromCoords(15, y, sum1, true);
+
+                // Sync with table2
+                const pos = rowData1[0];
+                const desc = rowData1[1];
+                const sal = getNum(rowData1[2]);
+
+                // Set item, description, and price in table 2
+                table2.setValueFromCoords(0, y, pos, true);
+                table2.setValueFromCoords(1, y, desc, true);
+                table2.setValueFromCoords(2, y, sal, true);
+
+                const depYears = {{ $gl_depreciation ?? 20 }};
+                let cumulativeUnits = 0;
+                let sumTable2 = 0;
+                for(let i = 3; i <= 14; i++) {
+                    const count = getNum(rowData1[i]);
+                    cumulativeUnits += count;
+                    let mDep = 0;
+                    if (depYears > 0 && sal >= 5000) {
+                        mDep = Math.round((cumulativeUnits * sal / (depYears * 12)) * 100) / 100;
+                    }
+                    table2.setValueFromCoords(i, y, mDep, true);
+                    sumTable2 += mDep;
+                }
+                table2.setValueFromCoords(15, y, Math.round(sumTable2 * 100) / 100, true);
+            } finally {
+                // Always clear the guard, even if something above throws —
+                // otherwise every future edit silently no-ops forever (the bug
+                // behind "table freezes until you refresh the page").
+                isUpdating = false;
+            }
+        };
+
+        const createInitialData = () => [new Array(columns.length).fill('')];
+        const createInitialCalcData = () => [new Array(calcColumns.length).fill('')];
+
+        table1 = jspreadsheet(document.getElementById('spreadsheet'), {
+            data: createInitialData(),
+            columns: columns,
+            minDimensions: [columns.length, 1],
+            onchange: onchange,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            // table1 can gain a row through more than just the "เพิ่มรายการ"
+            // button — e.g. pressing Enter on its last row — and table2 must
+            // always mirror it row-for-row or onchange's cross-table writes
+            // land on a row that doesn't exist yet and throw. Handling every
+            // insertion here (rather than only in the button's click handler)
+            // is what keeps the two tables in sync regardless of how the row
+            // was added.
+            oninsertrow: function(el, rowNumber, numOfRows, rowRecords, insertBefore) {
+                if (table2) table2.insertRow(numOfRows, rowNumber, insertBefore);
+                syncTableRows();
+            },
+            ondeleterow: function(el, rowNumber, numOfRows) {
+                if (table2) table2.deleteRow(rowNumber, numOfRows);
+                syncTableRows();
+            },
+            onselection: function(el, x1, y1, x2, y2, origin) {
+                const sheet = (el && el.jexcel) || table1;
+                if (!sheet || typeof sheet.getCellFromCoords !== 'function') return;
+                if (x1 === 0 && x2 === 0 && y1 === y2) {
+                    const cell = sheet.getCellFromCoords(0, y1);
+                    if (cell && !sheet.edition) {
+                        sheet.openEditor(cell, false);
+                    }
+                }
+            },
+            freezeColumns: 2,
+        });
+
+        table2 = jspreadsheet(document.getElementById('calc-spreadsheet'), {
+            data: createInitialCalcData(),
+            columns: calcColumns,
+            minDimensions: [calcColumns.length, 1],
+            allowInsertRow: true,
+            allowDeleteRow: true,
+            allowInsertColumn: false,
+            allowManualInsertColumn: false,
+            allowDeleteColumn: false,
+            tableOverflow: true,
+            contextMenu: function() { return false; },
+            freezeColumns: 2,
+        });
+
+        const sheetContainer = document.getElementById('spreadsheet');
+        if (sheetContainer && !sheetContainer._dropdownClickBound) {
+            sheetContainer._dropdownClickBound = true;
+            sheetContainer.addEventListener('click', function(e) {
+                const cell = e.target.closest('td.eb-dropdown-cell');
+                if (cell && !cell.classList.contains('editor') && table1 && !table1.edition) {
+                    table1.openEditor(cell, false);
+                }
+            });
+        }
+
+        // Bind add row button — table1's oninsertrow hook mirrors this into
+        // table2, so it isn't done here too (that would double-insert).
+        document.getElementById('add-row-btn').addEventListener('click', function() {
+            table1.insertRow();
+        });
+
+        // Ensure table2 synchronizes whenever Enter is pressed to create a new row
+        // And block decimal point (.) and minus (-) in month columns (Jan - Dec: x = 3 to 14)
+        const spreadsheetEl = document.getElementById('spreadsheet');
+        spreadsheetEl.addEventListener('keydown', function(e) {
+            if (e.which === 13) {
+                setTimeout(syncTableRows, 0);
+            }
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                if (x >= 3 && x <= 14) {
+                    if (e.ctrlKey || e.metaKey || e.altKey) return;
+                    const allowedControlKeys = ['Backspace', 'Tab', 'Enter', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+                    if (allowedControlKeys.includes(e.key)) return;
+                    if (!/^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                    }
+                }
+            }
+        }, true);
+
+        spreadsheetEl.addEventListener('input', function(e) {
+            if (table1 && table1.selectedCell) {
+                const x = table1.selectedCell[0];
+                if (x >= 3 && x <= 14 && e.target && (e.target.tagName === 'INPUT' || e.target.classList.contains('jexcel_editor'))) {
+                    if (e.target.value) {
+                        let clean = e.target.value.replace(/[^0-9]/g, '');
+                        clean = clean.replace(/^0+(?=\d)/, '');
+                        if (clean !== e.target.value) {
+                            e.target.value = clean;
+                        }
+                    }
+                }
+            }
+        }, true);
+
+        // Save button logic
+        document.getElementById('save-budget-btn').addEventListener('click', function() {
+            if (!table1) return;
+
+            const costCenterName = costCenterSelect.value;
+            const branchCode = branchSelectEl ? branchSelectEl.value : null;
+            if (branchSelectEl && !branchCode) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือกสาขาก่อนบันทึก', 'warning');
+                return;
+            }
+            if (!costCenterName) {
+                Swal.fire('แจ้งเตือน', 'กรุณาเลือก Cost Center ก่อนบันทึก', 'warning');
+                return;
+            }
+
+            let rows = table1.getData();
+            let dataToSave = [];
+            let emptyMonthRows = [];
+            let seenFixAssetRows = new Map();
+
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i];
+                let position = (row[0] || '').trim();
+                let description = row[1];
+                let salary = getNum(row[2]);
+
+                if (position) {
+                    let cleanDesc = (description !== null && description !== undefined ? String(description) : '').trim();
+                    let dupKey = position.toLowerCase() + '|||' + cleanDesc.toLowerCase();
+                    if (!seenFixAssetRows.has(dupKey)) {
+                        seenFixAssetRows.set(dupKey, { name: position, desc: cleanDesc, rowNumbers: [i + 1] });
+                    } else {
+                        seenFixAssetRows.get(dupKey).rowNumbers.push(i + 1);
+                    }
+                    const isItemInMaster = items.some(it => it.name === position);
+                    if (!isItemInMaster) {
+                        Swal.fire('แจ้งเตือน', `ไม่อนุญาตให้พิมพ์ระบุข้อความเอง กรุณาเลือกรายการจาก Dropdown เท่านั้น\n(แถวที่ ${i + 1}: "${position}" ไม่มีอยู่ในรายการตัวเลือก)`, 'warning');
+                        return;
+                    }
+
+                    if (salary <= 0) {
+                        Swal.fire('แจ้งเตือน', `กรุณาระบุราคาซื้อสำหรับ "${position}" (แถวที่ ${i + 1})`, 'warning');
+                        return;
+                    }
+                    if (salary < 5000) {
+                        Swal.fire('แจ้งเตือน', `ราคาซื้อในหมวดสินทรัพย์ถาวร (Fix Asset) ต้องมีมูลค่าตั้งแต่ 5,000 บาทขึ้นไป กรุณาตรวจสอบราคาสำหรับ "${position}" (แถวที่ ${i + 1})`, 'warning');
+                        return;
+                    }
+
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    let hasPositiveMonth = false;
+                    for (let c = 3; c <= 14; c++) {
+                        const val = row[c];
+                        const rawStr = String(val !== null && val !== undefined ? val : '').trim().replace(/,/g, '');
+                        const count = getNum(val);
+                        if (rawStr !== '') {
+                            if (!/^\d+$/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนในเดือน ${monthNames[c - 3]} ต้องเป็นตัวเลขเท่านั้น ไม่อนุญาตให้มีตัวอักษรหรืออักขระพิเศษ เช่น "${rawStr}" (แถวที่ ${i + 1}: ${position})`, 'warning');
+                                return;
+                            }
+                            if (/^0\d+/.test(rawStr)) {
+                                Swal.fire('แจ้งเตือน', `จำนวนในเดือน ${monthNames[c - 3]} ไม่อนุญาตให้กรอกรูปแบบที่มีเลข 0 นำหน้า เช่น "${rawStr}" (แถวที่ ${i + 1}: ${position}) กรุณาระบุเป็นตัวเลขจำนวนเต็มปกติ`, 'warning');
+                                return;
+                            }
+                            if (count % 1 !== 0 || count < 0) {
+                                Swal.fire('แจ้งเตือน', `จำนวนในเดือน ${monthNames[c - 3]} ต้องเป็นตัวเลขจำนวนเต็มเท่านั้น ไม่อนุญาตให้กรอกเลขทศนิยม (แถวที่ ${i + 1}: ${position})`, 'warning');
+                                return;
+                            }
+                        }
+                        if (count > 0) {
+                            hasPositiveMonth = true;
+                        }
+                    }
+                    if (!hasPositiveMonth) {
+                        emptyMonthRows.push({ rowNumber: i + 1, name: position, desc: cleanDesc });
+                    }
+
+                    let monthlyData = {
+                        'jan': { 'headcount': getNum(row[3]), 'cost': getNum(row[3]) * salary },
+                        'feb': { 'headcount': getNum(row[4]), 'cost': getNum(row[4]) * salary },
+                        'mar': { 'headcount': getNum(row[5]), 'cost': getNum(row[5]) * salary },
+                        'apr': { 'headcount': getNum(row[6]), 'cost': getNum(row[6]) * salary },
+                        'may': { 'headcount': getNum(row[7]), 'cost': getNum(row[7]) * salary },
+                        'jun': { 'headcount': getNum(row[8]), 'cost': getNum(row[8]) * salary },
+                        'jul': { 'headcount': getNum(row[9]), 'cost': getNum(row[9]) * salary },
+                        'aug': { 'headcount': getNum(row[10]), 'cost': getNum(row[10]) * salary },
+                        'sep': { 'headcount': getNum(row[11]), 'cost': getNum(row[11]) * salary },
+                        'oct': { 'headcount': getNum(row[12]), 'cost': getNum(row[12]) * salary },
+                        'nov': { 'headcount': getNum(row[13]), 'cost': getNum(row[13]) * salary },
+                        'dec': { 'headcount': getNum(row[14]), 'cost': getNum(row[14]) * salary }
+                    };
+
+                    dataToSave.push({
+                        'item_name': position,
+                        'description': description,
+                        'purchase_price': salary,
+                        'branch_code': branchCode,
+                        'cost_center_name': costCenterName,
+                        'monthly_data': monthlyData
+                    });
+                }
+            }
+
+            let duplicateFixAssetGroups = [];
+            for (let entry of seenFixAssetRows.values()) {
+                if (entry.rowNumbers.length > 1) {
+                    duplicateFixAssetGroups.push(entry);
+                }
+            }
+            if (duplicateFixAssetGroups.length > 0) {
+                const itemColTitle = (columns && columns[0] && columns[0].title) ? columns[0].title : 'เครื่องมือ';
+                showDuplicateFixAssetRowsWarning(duplicateFixAssetGroups, itemColTitle);
+                return;
+            }
+
+            if (emptyMonthRows.length > 0) {
+                showZeroMonthlyRowsWarning(emptyMonthRows);
+                return;
+            }
+
+            if (dataToSave.length === 0) {
+                Swal.fire('แจ้งเตือน', 'ไม่มีข้อมูลสำหรับบันทึก กรุณาระบุข้อมูลรายการปรับปรุงก่อนครับ', 'warning');
+                return;
+            }
+
+            const proceedWithSave = function() {
+                Swal.fire({
+                title: 'ยืนยันการบันทึกข้อมูล?',
+                text: "คุณตรวจสอบข้อมูลครบถ้วนและต้องการบันทึกใช่หรือไม่?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#0061f2',
+                cancelButtonColor: '#e81500',
+                confirmButtonText: 'ยืนยัน',
+                cancelButtonText: 'ยกเลิก'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'กำลังบันทึกข้อมูล...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    fetch('{{ route('budget_add_renovate') }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify(dataToSave)
+                    })
+                                        .then(response => window.handleFetchApiResponse(response))
+                    .then(data => {
+                        if (data.status === 'success') {
+                            Swal.fire('สำเร็จ!', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success').then(() => {
+                                window.location.href = '{{ route('budget_list') }}';
+                            });
+                        } else if (data.status === 'duplicate') {
+                            handleBudgetSaveDuplicateResponse(data, '{{ route('budget_list') }}');
+                        } else {
+                            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้: ' + data.message, 'error');
+                        }
+                    })
+                    .catch(window.handleFetchApiError);
+                }
+            });
+            };
+
+            if (typeof window.checkDuplicateBeforeSave === 'function') {
+                window.checkDuplicateBeforeSave({
+                    docType: 'Renovate',
+                    branchCode: branchCode,
+                    costCenterName: costCenterName,
+                    checkUrl: '{{ route('api_check_duplicate_document') }}',
+                    budgetListUrl: '{{ route('budget_list') }}',
+                    onProceed: proceedWithSave
+                });
+            } else {
+                proceedWithSave();
+            }
+        });
+    });
+</script>
+@endsection
