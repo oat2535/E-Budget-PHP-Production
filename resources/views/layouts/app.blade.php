@@ -158,12 +158,14 @@
         <!-- Sidenav Menu Heading (Core)-->
         <div class="sidenav-menu-heading">E-Budget</div>
 
-        @if($can_access_dashboard)
+        {{-- Dashboard (Temporarily hidden for Production - uncomment when ready to enable)
+        @if(!empty($can_access_dashboard) && \Illuminate\Support\Facades\Route::has('budget_dashboard'))
         <a class="nav-link {{ request()->routeIs('budget_dashboard') ? 'active' : '' }}" href="{{ route('budget_dashboard') }}">
             <div class="nav-link-icon"><i data-feather="bar-chart-2"></i></div>
             Dashboard
         </a>
         @endif
+        --}}
         
         <a class="nav-link {{ request()->routeIs('budget_list') ? 'active' : '' }}" href="{{ route('budget_list') }}">
             <div class="nav-link-icon"><i data-feather="list"></i></div>

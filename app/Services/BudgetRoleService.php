@@ -309,7 +309,8 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $session = $request->hasSession() ? $request->session() : null;
+        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_executive_view_only'] ?? false);
     }
 
@@ -321,7 +322,8 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $session = $request->hasSession() ? $request->session() : null;
+        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_district_view_only'] ?? false);
     }
 
@@ -333,7 +335,8 @@ class BudgetRoleService
         if (self::isPrivilegedUserAccount($request->user(), $request)) {
             return false;
         }
-        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
+        $session = $request->hasSession() ? $request->session() : null;
+        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($request->user()->username);
         return (bool) ($info['is_view_only'] ?? false);
     }
 
@@ -352,7 +355,8 @@ class BudgetRoleService
         }
 
         $user = $request->user();
-        $info = $request->session()->get('branch_info') ?? self::getBranchInfoFromImedx($user->username);
+        $session = $request->hasSession() ? $request->session() : null;
+        $info = $session?->get('branch_info') ?? self::getBranchInfoFromImedx($user->username);
 
         if (self::isPrivilegedUserAccount($user, $request)) {
             return true;
@@ -371,11 +375,13 @@ class BudgetRoleService
 
     public static function getBranchInfo(Request $request): array
     {
-        if ($request->session()->has('branch_info')) {
+        if ($request->hasSession() && $request->session()->has('branch_info')) {
             return $request->session()->get('branch_info');
         }
         $info = self::getBranchInfoFromImedx($request->user()?->username);
-        $request->session()->put('branch_info', $info);
+        if ($request->hasSession()) {
+            $request->session()->put('branch_info', $info);
+        }
         return $info;
     }
 

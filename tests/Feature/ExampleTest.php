@@ -27,4 +27,16 @@ class ExampleTest extends TestCase
         $response = $this->actingAs($user)->get('/');
         $response->assertStatus(200);
     }
+
+    /**
+     * Admin user receives 200 OK on home page without encountering missing dashboard route exception.
+     */
+    public function test_admin_user_can_access_home(): void
+    {
+        $user = new User(['username' => 'admin']);
+        $user->is_superuser = true;
+
+        $response = $this->actingAs($user)->get('/');
+        $response->assertStatus(200);
+    }
 }
