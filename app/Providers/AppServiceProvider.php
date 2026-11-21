@@ -58,7 +58,7 @@ class AppServiceProvider extends ServiceProvider
             $canAddBudget = $isAuthWritable && $canMutateWhenFrozen;
 
             $view->with([
-                'session_idle_timeout_seconds' => config('session.lifetime', 120) * 60,
+                'session_idle_timeout_seconds' => config('session.lifetime', 60) * 60,
                 'system_frozen' => (int) $settings->is_frozen,
                 'frozen_message' => $settings->frozen_message,
                 'active_budget_year' => (int) $settings->active_budget_year,

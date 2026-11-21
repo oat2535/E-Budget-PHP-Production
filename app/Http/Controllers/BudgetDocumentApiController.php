@@ -1031,7 +1031,7 @@ class BudgetDocumentApiController extends Controller
         return response()->json([
             'status' => 'success',
             'authenticated' => true,
-            'idle_timeout_seconds' => config('session.lifetime', 120) * 60,
+            'idle_timeout_seconds' => config('session.lifetime', 60) * 60,
         ]);
     }
 }

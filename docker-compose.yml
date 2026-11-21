@@ -20,7 +20,7 @@ services:
 
       # Session & Cache (File-based: fast, isolated, zero extra DB tables)
       SESSION_DRIVER: "${SESSION_DRIVER:-file}"
-      SESSION_LIFETIME: "${SESSION_LIFETIME:-120}"
+      SESSION_LIFETIME: "${SESSION_LIFETIME:-60}"
       CACHE_STORE: "${CACHE_STORE:-file}"
       QUEUE_CONNECTION: "${QUEUE_CONNECTION:-sync}"
 

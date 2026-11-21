@@ -348,7 +348,9 @@
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const testIdleSec = parseInt(urlParams.get('test_idle'), 10);
-                const configuredTimeoutSec = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 3600;
+                const parsedTimeoutSec = parseInt(document.body.dataset.idleTimeoutSeconds, 10);
+                // Cap idle timeout at 1 hour (3600s) maximum unless explicitly overridden by test_idle
+                const configuredTimeoutSec = (parsedTimeoutSec > 0) ? Math.min(parsedTimeoutSec, 3600) : 3600;
                 const IDLE_TIMEOUT_SECONDS = (testIdleSec > 0) ? testIdleSec : configuredTimeoutSec;
                 const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
 
@@ -397,6 +399,12 @@
                     let remainingSeconds = (typeof initialSeconds === 'number' && initialSeconds > 0)
                         ? Math.round(initialSeconds)
                         : WARNING_BEFORE_SECONDS;
+
+                    if (typeof Swal !== 'function' || !Swal.fire) {
+                        alert('แจ้งเตือน: ไม่มีการเคลื่อนไหวบนหน้าจอเกิน 1 ชั่วโมง เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติ');
+                        performAutoLogout();
+                        return;
+                    }
 
                     Swal.fire({
                         icon: 'warning',
@@ -513,7 +521,17 @@
                     // Do not reset activity if the warning popup is actively awaiting user decision
                     if (warningPopupActive) return;
 
-                    lastActivityTime = Date.now();
+                    const now = Date.now();
+                    const idleTimeSec = Math.floor((now - lastActivityTime) / 1000);
+                    // Critical: If the user was ALREADY inactive >= IDLE_TIMEOUT_SECONDS before this event
+                    // (e.g. user walked away, screen slept/locked, and just returned and moved the mouse),
+                    // do NOT erase their idle history! Trigger the timeout check directly!
+                    if (idleTimeSec >= IDLE_TIMEOUT_SECONDS) {
+                        checkIdleTimeout();
+                        return;
+                    }
+
+                    lastActivityTime = now;
                     try { localStorage.setItem('ebudget_last_activity', String(lastActivityTime)); } catch (_) {}
 
                     if (activityThrottled) return;

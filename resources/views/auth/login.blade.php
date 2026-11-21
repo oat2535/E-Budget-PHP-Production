@@ -142,6 +142,22 @@
                         <div class="w-100" style="max-width: 360px;">
                             <h2 class="text-center mb-4 fw-bolder" style="color: #2a3547 !important; letter-spacing: 0.5px;">E-Budget</h2>
                             
+                            @php
+                                $warningMsg = session('warning') ?? ($warning ?? null);
+                                $errorMsg = session('error') ?? ($error ?? null) ?? (isset($errors) && $errors->any() ? $errors->first() : null);
+                            @endphp
+                            @if(!empty($warningMsg))
+                                <div class="alert alert-warning d-flex align-items-center mb-3 py-2 px-3" role="alert" style="border-radius: 12px; font-size: 13.5px; line-height: 1.5; border: 1px solid #fed7aa; background-color: #fff7ed; color: #9a3412;">
+                                    <i class="fas fa-exclamation-circle me-2 fs-5 text-warning flex-shrink-0"></i>
+                                    <div>{{ $warningMsg }}</div>
+                                </div>
+                            @elseif(!empty($errorMsg))
+                                <div class="alert alert-danger d-flex align-items-center mb-3 py-2 px-3" role="alert" style="border-radius: 12px; font-size: 13.5px; line-height: 1.5; border: 1px solid #fecaca; background-color: #fef2f2; color: #991b1b;">
+                                    <i class="fas fa-times-circle me-2 fs-5 text-danger flex-shrink-0"></i>
+                                    <div>{{ $errorMsg }}</div>
+                                </div>
+                            @endif
+
                             <form method="POST" action="{{ route('login') }}">
                                 @csrf
                                 @if(request()->filled('next'))
@@ -165,8 +181,6 @@
         </div>
 
         @php
-            $warningMsg = session('warning') ?? ($warning ?? null);
-            $errorMsg = session('error') ?? ($error ?? null) ?? (isset($errors) && $errors->any() ? $errors->first() : null);
             $hasAlert = !empty($warningMsg) || !empty($errorMsg);
             $alertType = !empty($warningMsg) ? 'warning' : 'error';
             $alertTitle = !empty($warningMsg) ? 'แจ้งเตือน: เซสชันหมดอายุ' : 'เข้าสู่ระบบไม่สำเร็จ';
@@ -176,16 +190,25 @@
             <!-- SweetAlert2 loaded on-demand only when alerts are present -->
             <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
             <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    Swal.fire({
-                        icon: '{{ $alertType }}',
-                        title: '{{ $alertTitle }}',
-                        html: {!! json_encode($alertMsg, JSON_UNESCAPED_UNICODE) !!},
-                        confirmButtonColor: '#0076c8',
-                        confirmButtonText: 'ตกลง',
-                        width: 520
-                    });
-                });
+                (function() {
+                    function triggerAlert() {
+                        if (typeof Swal === 'function' && Swal.fire) {
+                            Swal.fire({
+                                icon: '{{ $alertType }}',
+                                title: '{{ $alertTitle }}',
+                                html: {!! json_encode($alertMsg, JSON_UNESCAPED_UNICODE) !!},
+                                confirmButtonColor: '#0076c8',
+                                confirmButtonText: 'ตกลง',
+                                width: 520
+                            });
+                        }
+                    }
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', triggerAlert);
+                    } else {
+                        triggerAlert();
+                    }
+                })();
             </script>
         @endif
     </body>
