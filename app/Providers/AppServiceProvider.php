@@ -24,7 +24,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (str_starts_with(config('app.url'), 'https://') || app()->environment('production', 'uat')) {
+        $isLocalHost = in_array(request()->getHost(), ['127.0.0.1', 'localhost', '::1'], true)
+            || str_starts_with(request()->getHost(), '192.168.')
+            || str_starts_with(request()->getHost(), '10.');
+        $isCliServer = php_sapi_name() === 'cli-server';
+
+        if ($isLocalHost || $isCliServer) {
+            // When accessing via local dev server (e.g. php artisan serve), ensure URLs and assets stay on plain HTTP
+            config(['app.asset_url' => null]);
+        } elseif (str_starts_with((string) config('app.url'), 'https://') || app()->environment('production', 'uat')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
 
