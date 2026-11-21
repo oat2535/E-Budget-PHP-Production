@@ -158,14 +158,12 @@
         <!-- Sidenav Menu Heading (Core)-->
         <div class="sidenav-menu-heading">E-Budget</div>
 
-        {{-- [Temporarily hidden for Production - uncomment when ready to enable]
         @if($can_access_dashboard)
         <a class="nav-link {{ request()->routeIs('budget_dashboard') ? 'active' : '' }}" href="{{ route('budget_dashboard') }}">
             <div class="nav-link-icon"><i data-feather="bar-chart-2"></i></div>
             Dashboard
         </a>
         @endif
-        --}}
         
         <a class="nav-link {{ request()->routeIs('budget_list') ? 'active' : '' }}" href="{{ route('budget_list') }}">
             <div class="nav-link-icon"><i data-feather="list"></i></div>
@@ -335,62 +333,145 @@
                 });
             }
 
-            // Inactivity timeout: If there is no user activity on the page for 2 hours (SESSION_COOKIE_AGE),
-            // display a SweetAlert popup alerting that the session expired and require re-login.
-            // When the user is active, periodically send a lightweight heartbeat ping to refresh
-            // Django's server-side session timer so active work in forms/tables is never interrupted.
+            // Inactivity timeout & Idle warning popup:
+            // Detect user activity (mousemove, mousedown, keydown, scroll, touchstart, click).
+            // If there is no activity for 1 hour (3600 seconds), display a friendly warning popup
+            // with a 1-minute (60 seconds) countdown and a "อยู่ในระบบต่อ" (Stay in system) button.
+            // If the user clicks "อยู่ในระบบต่อ", reset timer and keep session alive.
+            // If the countdown reaches 0 or user doesn't respond, automatically log out.
             (function() {
                 if (document.body.dataset.authenticated !== 'true') return;
 
-                const IDLE_TIMEOUT_SECONDS = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 7200;
-                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
+                const IDLE_TIMEOUT_SECONDS = parseInt(document.body.dataset.idleTimeoutSeconds, 10) || 3600;
+                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000; // 1 hour (3600000 ms)
+                const COUNTDOWN_SECONDS = 60; // 1 minute countdown
                 const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // Heartbeat every 10 min of active use
                 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
 
                 let lastActivityTime = Date.now();
                 let lastHeartbeatTime = Date.now();
-                let sessionExpiredModalShown = false;
+                let warningPopupActive = false;
                 let activityThrottled = false;
+                let countdownTimer = null;
 
-                function showSessionExpiredModal() {
-                    if (sessionExpiredModalShown) return;
-                    sessionExpiredModalShown = true;
+                function performAutoLogout() {
+                    const form = document.getElementById('logoutForm');
+                    if (form) {
+                        form.submit();
+                    } else {
+                        window.location.href = '{{ route("logout") }}';
+                    }
+                }
+
+                function showInactivityWarningModal(initialSeconds) {
+                    if (warningPopupActive) return;
+                    warningPopupActive = true;
+
+                    let remainingSeconds = (typeof initialSeconds === 'number' && initialSeconds > 0)
+                        ? initialSeconds
+                        : COUNTDOWN_SECONDS;
+
                     Swal.fire({
                         icon: 'warning',
-                        title: 'เซสชันหมดอายุ',
-                        text: 'คุณไม่ได้ใช้งานระบบเป็นเวลาเกิน 2 ชั่วโมง เซสชันการเข้าใช้งานหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
-                        confirmButtonText: 'เข้าสู่ระบบ',
+                        title: 'แจ้งเตือน: ไม่มีการใช้งานระบบ',
+                        html: `
+                            <div style="font-size: 15px; line-height: 1.6; color: #374151; margin-bottom: 12px;">
+                                ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอเกิน <strong>1 ชั่วโมง</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:
+                            </div>
+                            <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px; margin: 12px 0;">
+                                <span id="idle-countdown-display" style="font-size: 2.2rem; font-weight: 700; color: #dc2626; font-family: monospace;">${remainingSeconds}</span>
+                                <span style="font-size: 1.1rem; font-weight: 600; color: #dc2626; margin-left: 4px;">วินาที</span>
+                            </div>
+                            <p style="font-size: 13.5px; color: #6b7280; margin: 0;">
+                                หากท่านต้องการทำงานต่อ กรุณากดปุ่ม <strong>"อยู่ในระบบต่อ"</strong> ครับ
+                            </p>
+                        `,
+                        confirmButtonText: '<i class="fas fa-check-circle me-1"></i> อยู่ในระบบต่อ',
                         confirmButtonColor: '#0061f2',
+                        showCancelButton: true,
+                        cancelButtonText: 'ออกจากระบบทันที',
+                        cancelButtonColor: '#6b7280',
                         allowOutsideClick: false,
-                        allowEscapeKey: false
-                    }).then(() => {
-                        window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            const display = document.getElementById('idle-countdown-display');
+                            countdownTimer = setInterval(() => {
+                                remainingSeconds--;
+                                if (display) {
+                                    display.textContent = remainingSeconds;
+                                }
+                                if (remainingSeconds <= 0) {
+                                    clearInterval(countdownTimer);
+                                    countdownTimer = null;
+                                    Swal.close();
+                                    performAutoLogout();
+                                }
+                            }, 1000);
+                        },
+                        willClose: () => {
+                            if (countdownTimer) {
+                                clearInterval(countdownTimer);
+                                countdownTimer = null;
+                            }
+                        }
+                    }).then((result) => {
+                        if (countdownTimer) {
+                            clearInterval(countdownTimer);
+                            countdownTimer = null;
+                        }
+
+                        if (result.isConfirmed) {
+                            // User clicked "อยู่ในระบบต่อ"
+                            lastActivityTime = Date.now();
+                            warningPopupActive = false;
+                            sendKeepalivePing();
+
+                            Swal.fire({
+                                toast: true,
+                                position: 'top-end',
+                                icon: 'success',
+                                title: 'ต่อเวลาการใช้งานเรียบร้อยแล้ว',
+                                showConfirmButton: false,
+                                timer: 2000
+                            });
+                        } else if (result.dismiss === Swal.DismissReason.cancel) {
+                            // User clicked "ออกจากระบบทันที"
+                            performAutoLogout();
+                        }
                     });
                 }
 
                 function checkIdleTimeout() {
-                    if (sessionExpiredModalShown) return;
+                    if (warningPopupActive) return;
                     const idleTime = Date.now() - lastActivityTime;
-                    if (idleTime >= IDLE_TIMEOUT_MS) {
-                        showSessionExpiredModal();
+                    const gracePeriodMs = COUNTDOWN_SECONDS * 1000;
+
+                    if (idleTime >= IDLE_TIMEOUT_MS + gracePeriodMs) {
+                        // User has been away longer than 1 hour + 1 minute grace period (e.g. computer was asleep/locked)
+                        performAutoLogout();
+                    } else if (idleTime >= IDLE_TIMEOUT_MS) {
+                        // 1 hour reached; calculate remaining seconds in the 1-minute window
+                        const remainingSec = Math.max(1, Math.round((IDLE_TIMEOUT_MS + gracePeriodMs - idleTime) / 1000));
+                        showInactivityWarningModal(remainingSec);
                     }
                 }
 
                 function sendKeepalivePing() {
-                    if (sessionExpiredModalShown) return;
                     lastHeartbeatTime = Date.now();
                     fetch('/api/session/keepalive/', {
                         method: 'GET',
                         headers: { 'X-Requested-With': 'XMLHttpRequest' }
                     }).then(res => {
                         if (res.status === 401 || (res.redirected && res.url && res.url.includes('/login'))) {
-                            showSessionExpiredModal();
+                            performAutoLogout();
                         }
                     }).catch(() => {});
                 }
 
                 function onUserActivity() {
-                    if (sessionExpiredModalShown) return;
+                    // Do not reset activity if the warning popup is actively awaiting user decision
+                    if (warningPopupActive) return;
+
                     lastActivityTime = Date.now();
 
                     if (activityThrottled) return;
@@ -403,7 +484,7 @@
                 }
 
                 ACTIVITY_EVENTS.forEach(evt => document.addEventListener(evt, onUserActivity, { passive: true }));
-                setInterval(checkIdleTimeout, 15000);
+                setInterval(checkIdleTimeout, 1000);
                 document.addEventListener('visibilitychange', () => {
                     if (!document.hidden) checkIdleTimeout();
                 });

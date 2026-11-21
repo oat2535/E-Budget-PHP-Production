@@ -61,7 +61,7 @@ class AuthController extends Controller
         if ($failureReason === 'inactive_employee') {
             $msg = 'บัญชีนี้ถูกระงับการใช้งานในระบบ iMedX กรุณาติดต่อ HR หรือผู้ดูแลระบบ';
         } elseif ($failureReason === 'missing_imedx_profile') {
-            $msg = 'ไม่พบข้อมูลสิทธิ์สาขาหรือตำแหน่งในระบบ iMedX กรุณาติดต่อ HR หรือผู้ดูแลระบบ';
+            $msg = 'บัญชีของท่านยังไม่ได้รับสิทธิ์เข้าใช้งานระบบ E-Budget เนื่องจากไม่พบข้อมูลสาขาหรือเลขที่บัญชีในระบบ iMedX ให้ติดต่อแผนกบัญชี หรือแผนก IT เพื่อดำเนินการตรวจสอบและเปิดสิทธิ์การใช้งาน';
         } else {
             $msg = 'Username หรือ Password ไม่ถูกต้อง';
         }
