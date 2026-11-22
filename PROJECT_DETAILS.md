@@ -59,6 +59,16 @@ flowchart TD
 - **ฐานข้อมูล:** PostgreSQL (Dual-database Architecture)
 - **Frontend & UI:** Blade Templates, SB Admin Pro, Bootstrap 5, JSpreadsheet (JExcel CE), JSuites, TomSelect, DataTables, FontAwesome 6, Feather Icons, ฟอนต์ Metropolis
 
+### 2.2 ระบบตรวจสอบและวินิจฉัยสภาพแวดล้อม (System Diagnostics & Health Check)
+- **URL Endpoint:** `/dianosis` หรือ `/diagnosis` (เข้าถึงได้โดยตรงผ่านเบราว์เซอร์)
+- **คุณสมบัติ:**
+  - แสดงผลเวอร์ชัน **PHP** (เช่น `8.3.36` / `8.3.37`) และ **Laravel Framework** (เช่น `13.43.0`)
+  - ตรวจสอบสถานะส่วนขยายสำคัญ (`bcmath`, `pdo_pgsql`, `zip`, `mbstring`, `intl`)
+  - ตรวจสอบความพร้อมของฐานข้อมูลหลัก (`pgsql`) และ iMedX (`pgsql_imedx`) แบบ Real-time
+  - ตรวจสอบสถานะ OPcache, การใช้หน่วยความจำ (RAM Usage), และเวลาในการประมวลผล (Execution Time ms)
+  - รองรับทั้งการดูผ่าน Web UI สวยงาม และเรียกเป็น JSON API ผ่าน `/dianosis?format=json`
+  - ปลอดภัยตามมาตรฐานความมั่นคงปลอดภัย (Security Guardrails) ไม่เปิดเผยรหัสผ่านหรือความลับใดๆ
+
 ---
 
 ## 3. ระบบยืนยันตัวตนและการจัดการสิทธิ์ (Dual Auth & RBAC)

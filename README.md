@@ -93,6 +93,11 @@ flowchart TD
 - ฟังก์ชันล็อกไม่ให้ผู้ใช้งานทั่วไปแก้ไขหรือเพิ่มงบประมาณเมื่อพ้นกำหนดส่ง
 - ผู้ดูแลระบบ (Privileged User) ยังคงสามารถเข้าปรับปรุงข้อมูลฉุกเฉินได้
 
+### 2.6 ระบบตรวจสอบและวินิจฉัยสภาพแวดล้อม (System Diagnostics & Health Check)
+- **URL Endpoint:** `/dianosis` หรือ `/diagnosis` (เข้าถึงผ่านเบราว์เซอร์ได้ทันที)
+- รายงานเวอร์ชัน **PHP** และ **Laravel Framework**, สถานะส่วนขยายหลัก (`bcmath`, `pdo_pgsql`, `zip`, `intl`), การเชื่อมต่อฐานข้อมูลคู่ขนาน (`pgsql`, `pgsql_imedx`), การใช้งาน RAM และสถานะ OPcache แบบ Real-time
+- รองรับทั้งมุมมอง Dashboard HTML และ JSON API ผ่าน `/dianosis?format=json` โดยไม่เปิดเผยข้อมูล Credentials หรือ Secret ที่เป็นความลับ
+
 ---
 
 ## 3. จุดเด่นด้านประสิทธิภาพและความเสถียรภาพ (Performance & Stability)

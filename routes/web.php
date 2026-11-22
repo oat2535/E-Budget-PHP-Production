@@ -5,8 +5,13 @@ use App\Http\Controllers\BudgetCreateController;
 use App\Http\Controllers\BudgetDocumentApiController;
 use App\Http\Controllers\BudgetListController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DiagnosisController;
 use App\Http\Controllers\SystemController;
 use Illuminate\Support\Facades\Route;
+
+// System Diagnostics routes (supports both /dianosis and /diagnosis)
+Route::get('/dianosis', DiagnosisController::class)->name('system_dianosis');
+Route::get('/diagnosis', DiagnosisController::class)->name('system_diagnosis');
 
 // Guest / Authentication routes
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
@@ -41,19 +46,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/api/document/cancel/{doc_type}/{doc_no}', [BudgetDocumentApiController::class, 'cancelDocument'])->name('api_document_cancel');
     });
 
-    // Safe Dashboard Redirect when hidden for Production (prevents dashboard from opening and avoids 404/500)
-    Route::get('/dashboard', function () {
-        return redirect()->route('budget_list');
-    })->name('budget_dashboard');
-
     /*
     |--------------------------------------------------------------------------
-    | Dashboard Routes (Temporarily hidden for Production - uncomment to enable)
+    | Dashboard Routes
     |--------------------------------------------------------------------------
+    */
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('budget_dashboard');
     Route::get('/api/dashboard/data', [DashboardController::class, 'data'])->name('api_dashboard_data');
     Route::get('/api/dashboard/export', [DashboardController::class, 'export'])->name('api_dashboard_export');
-    */
 
     // Budget Document APIs
     Route::get('/api/get_documents/{category_code}', [BudgetDocumentApiController::class, 'getDocuments'])->name('api_get_documents');
