@@ -351,15 +351,25 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 const testIdleSec = parseInt(urlParams.get('test_idle'), 10);
                 const parsedTimeoutSec = parseInt(document.body.dataset.idleTimeoutSeconds, 10);
-                // Cap idle timeout at 1 hour (3600s) maximum unless explicitly overridden by test_idle
-                const configuredTimeoutSec = (parsedTimeoutSec > 0) ? Math.min(parsedTimeoutSec, 3600) : 3600;
-                const IDLE_TIMEOUT_SECONDS = (testIdleSec > 0) ? testIdleSec : configuredTimeoutSec;
-                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
 
-                // Advance warning before timeout (120s for standard 1hr timeout, or proportional for quick tests)
-                const WARNING_BEFORE_SECONDS = (IDLE_TIMEOUT_SECONDS <= 30)
-                    ? Math.max(3, Math.floor(IDLE_TIMEOUT_SECONDS / 2))
-                    : Math.min(120, Math.floor(IDLE_TIMEOUT_SECONDS * 0.1));
+                let IDLE_TIMEOUT_SECONDS;
+                let WARNING_BEFORE_SECONDS;
+
+                if (testIdleSec > 0) {
+                    // Quick test mode:
+                    // test_idle specifies the EXACT idle waiting duration before the popup appears (e.g. 15s)
+                    // The countdown inside the popup runs for min(10, testIdleSec) seconds.
+                    const countdownSec = Math.max(3, Math.min(10, testIdleSec));
+                    WARNING_BEFORE_SECONDS = countdownSec;
+                    IDLE_TIMEOUT_SECONDS = testIdleSec + countdownSec;
+                } else {
+                    // Standard production mode:
+                    // 1 hour (3600 seconds) timeout. Advance warning 2 minutes (120 seconds).
+                    const configuredTimeoutSec = (parsedTimeoutSec > 0) ? Math.min(parsedTimeoutSec, 3600) : 3600;
+                    IDLE_TIMEOUT_SECONDS = configuredTimeoutSec;
+                    WARNING_BEFORE_SECONDS = Math.min(120, Math.floor(IDLE_TIMEOUT_SECONDS * 0.1));
+                }
+                const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_SECONDS * 1000;
                 const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // Heartbeat ping every 10 min during active usage
 
                 let lastActivityTime = Date.now();
@@ -372,14 +382,22 @@
 
                 // Sync lastActivityTime from localStorage if available
                 try {
-                    const stored = localStorage.getItem('ebudget_last_activity');
-                    if (stored) {
-                        const parsed = parseInt(stored, 10);
-                        if (!isNaN(parsed) && parsed > 0 && (Date.now() - parsed) < IDLE_TIMEOUT_MS) {
-                            lastActivityTime = parsed;
+                    if (testIdleSec > 0) {
+                        // In test mode, always start fresh from current page load time (0 seconds idle)
+                        lastActivityTime = Date.now();
+                        localStorage.setItem('ebudget_last_activity', String(lastActivityTime));
+                    } else {
+                        const stored = localStorage.getItem('ebudget_last_activity');
+                        if (stored) {
+                            const parsed = parseInt(stored, 10);
+                            // Only adopt stored time if it represents activity AFTER the current page load
+                            // (e.g. from another active tab, but NEVER backdate a fresh page load!)
+                            if (!isNaN(parsed) && parsed > lastActivityTime && (Date.now() - parsed) < IDLE_TIMEOUT_MS) {
+                                lastActivityTime = parsed;
+                            }
                         }
+                        localStorage.setItem('ebudget_last_activity', String(lastActivityTime));
                     }
-                    localStorage.setItem('ebudget_last_activity', String(lastActivityTime));
                 } catch (_) {}
 
                 function performAutoLogout() {
@@ -408,12 +426,16 @@
                         return;
                     }
 
+                    const idleDescHtml = (testIdleSec > 0)
+                        ? `ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอมาเป็นเวลา <strong>${testIdleSec} วินาที (โหมดทดสอบ)</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:`
+                        : `ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอมาเป็นเวลาเกือบ <strong>1 ชั่วโมง</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:`;
+
                     Swal.fire({
                         icon: 'warning',
                         title: 'แจ้งเตือน: ไม่มีการใช้งานระบบ',
                         html: `
                             <div style="font-size: 15px; line-height: 1.6; color: #374151; margin-bottom: 12px;">
-                                ท่านไม่ได้ทำรายการหรือไม่มีการเคลื่อนไหวบนหน้าจอมาเป็นเวลาเกือบ <strong>1 ชั่วโมง</strong> เพื่อความปลอดภัยของข้อมูล ระบบจะออกจากระบบอัตโนมัติในอีก:
+                                ${idleDescHtml}
                             </div>
                             <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px; margin: 12px 0;">
                                 <span id="idle-countdown-display" style="font-size: 2.2rem; font-weight: 700; color: #dc2626; font-family: monospace;">${remainingSeconds}</span>
