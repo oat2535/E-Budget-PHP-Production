@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -13,8 +15,22 @@ class DiagnosisController extends Controller
     /**
      * Handle the system diagnosis request.
      */
-    public function __invoke(Request $request): JsonResponse|Response
+    public function __invoke(Request $request): JsonResponse|Response|RedirectResponse
     {
+        // 0. Security Guardrail: Authentication is strictly required
+        if (! Auth::check()) {
+            if ($request->wantsJson() || $request->query('format') === 'json' || $request->has('json')) {
+                return response()->json([
+                    'status' => 'unauthenticated',
+                    'message' => 'กรุณาเข้าสู่ระบบก่อนเข้าถึงข้อมูลการวินิจฉัยระบบ (Authentication Required)',
+                ], 401);
+            }
+
+            return redirect()->route('login', ['next' => $request->getRequestUri()])
+                ->with('warning_title', 'แจ้งเตือนความปลอดภัย')
+                ->with('warning', 'หน้านี้จำกัดสิทธิ์เฉพาะผู้ใช้งานที่ผ่านการเข้าสู่ระบบแล้วเท่านั้น กรุณาลงชื่อเข้าใช้งานก่อนเข้าถึงหน้าตรวจสอบและวินิจฉัยระบบ (System Diagnostics)');
+        }
+
         $startTime = microtime(true);
 
         // 1. PHP & Laravel Information

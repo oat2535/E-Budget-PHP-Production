@@ -183,7 +183,7 @@
         @php
             $hasAlert = !empty($warningMsg) || !empty($errorMsg);
             $alertType = !empty($warningMsg) ? 'warning' : 'error';
-            $alertTitle = !empty($warningMsg) ? 'แจ้งเตือน: เซสชันหมดอายุ' : 'เข้าสู่ระบบไม่สำเร็จ';
+            $alertTitle = session('warning_title') ?? ($warning_title ?? (!empty($warningMsg) ? 'แจ้งเตือน: เซสชันหมดอายุ' : 'เข้าสู่ระบบไม่สำเร็จ'));
             $alertMsg = $warningMsg ?? $errorMsg ?? '';
         @endphp
         @if($hasAlert)

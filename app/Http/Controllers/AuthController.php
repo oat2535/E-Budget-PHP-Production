@@ -29,10 +29,12 @@ class AuthController extends Controller
         }
 
         $warning = session('warning');
+        $warningTitle = session('warning_title');
         $error = session('error');
 
         return view('auth.login', [
             'warning' => $warning,
+            'warning_title' => $warningTitle,
             'error' => $error,
         ]);
     }
@@ -65,16 +67,7 @@ class AuthController extends Controller
 
             $nextUrl = $request->input('next');
             if ($nextUrl && str_starts_with($nextUrl, '/')) {
-                if (str_starts_with($nextUrl, '/dashboard')) {
-                    $nextUrl = route('budget_list');
-                }
                 return redirect($nextUrl);
-            }
-
-            // Clear any intended URL pointing to dashboard so it never auto-opens upon login
-            $intended = session()->get('url.intended');
-            if ($intended && str_contains($intended, '/dashboard')) {
-                session()->forget('url.intended');
             }
 
             return redirect()->intended(route('budget_list'));
