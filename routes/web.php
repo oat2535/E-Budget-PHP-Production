@@ -41,14 +41,19 @@ Route::middleware('auth')->group(function () {
         Route::post('/api/document/cancel/{doc_type}/{doc_no}', [BudgetDocumentApiController::class, 'cancelDocument'])->name('api_document_cancel');
     });
 
+    // Safe Dashboard Redirect when hidden for Production (prevents dashboard from opening and avoids 404/500)
+    Route::get('/dashboard', function () {
+        return redirect()->route('budget_list');
+    })->name('budget_dashboard');
+
     /*
     |--------------------------------------------------------------------------
-    | Dashboard Routes
+    | Dashboard Routes (Temporarily hidden for Production - uncomment to enable)
     |--------------------------------------------------------------------------
-    */
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('budget_dashboard');
     Route::get('/api/dashboard/data', [DashboardController::class, 'data'])->name('api_dashboard_data');
     Route::get('/api/dashboard/export', [DashboardController::class, 'export'])->name('api_dashboard_export');
+    */
 
     // Budget Document APIs
     Route::get('/api/get_documents/{category_code}', [BudgetDocumentApiController::class, 'getDocuments'])->name('api_get_documents');

@@ -25,21 +25,33 @@ class DashboardTest extends TestCase
         return ! empty($branches) ? $branches[0]['code'] : 'HO';
     }
 
+    protected function skipIfRoutesHidden(): void
+    {
+        if (! Route::has('api_dashboard_data')) {
+            $this->markTestSkipped('Dashboard feature and routes are temporarily hidden for Production.');
+        }
+    }
+
     public function test_dashboard_unauthenticated_redirects_to_login(): void
     {
         $response = $this->get('/dashboard');
         $response->assertRedirect('/login');
     }
 
-    public function test_dashboard_view_renders_for_admin(): void
+    public function test_dashboard_view_renders_or_redirects_for_admin(): void
     {
         $response = $this->actingAs($this->getAdminUser())->get('/dashboard');
-        $response->assertStatus(200);
-        $response->assertSee('E-Budget Branch Dashboard');
+        if (! Route::has('api_dashboard_data')) {
+            $response->assertRedirect(route('budget_list'));
+        } else {
+            $response->assertStatus(200);
+            $response->assertSee('E-Budget Branch Dashboard');
+        }
     }
 
     public function test_dashboard_data_api_missing_branch_returns_400(): void
     {
+        $this->skipIfRoutesHidden();
         $response = $this->actingAs($this->getAdminUser())->getJson('/api/dashboard/data');
         $response->assertStatus(400);
         $response->assertJson(['status' => 'error']);
@@ -47,6 +59,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_data_api_invalid_year_returns_400(): void
     {
+        $this->skipIfRoutesHidden();
         $branch = $this->getTestBranchCode();
         $response = $this->actingAs($this->getAdminUser())->getJson("/api/dashboard/data?branch={$branch}&year=invalid");
         $response->assertStatus(400);
@@ -55,6 +68,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_data_api_valid_single_branch(): void
     {
+        $this->skipIfRoutesHidden();
         $branch = $this->getTestBranchCode();
         $response = $this->actingAs($this->getAdminUser())->getJson("/api/dashboard/data?branch={$branch}&year=2026");
         $response->assertStatus(200);
@@ -70,6 +84,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_data_api_all_tlph(): void
     {
+        $this->skipIfRoutesHidden();
         $response = $this->actingAs($this->getAdminUser())->getJson('/api/dashboard/data?branch=ALL&year=2026');
         $response->assertStatus(200);
         $response->assertJson([
@@ -83,6 +98,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_export_api_returns_xlsx(): void
     {
+        $this->skipIfRoutesHidden();
         $branch = $this->getTestBranchCode();
         $response = $this->actingAs($this->getAdminUser())->get("/api/dashboard/export?branch={$branch}&year=2026");
         $response->assertStatus(200);
@@ -95,6 +111,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_data_api_with_cost_center(): void
     {
+        $this->skipIfRoutesHidden();
         $branch = $this->getTestBranchCode();
         $response = $this->actingAs($this->getAdminUser())->getJson("/api/dashboard/data?branch={$branch}&year=2026&cost_center=Center");
         $response->assertStatus(200);
@@ -133,6 +150,7 @@ class DashboardTest extends TestCase
 
     public function test_dashboard_unauthorized_cost_center_returns_403(): void
     {
+        $this->skipIfRoutesHidden();
         $user = new User(['username' => 'dept_user']);
         $user->is_superuser = false;
         $branch = $this->getTestBranchCode();

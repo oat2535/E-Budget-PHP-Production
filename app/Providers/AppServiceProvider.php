@@ -68,7 +68,7 @@ class AppServiceProvider extends ServiceProvider
                 'is_view_only' => $isViewOnly,
                 'can_edit_own_documents' => $canEditOwnDocuments,
                 'can_add_budget' => $canAddBudget,
-                'can_access_dashboard' => BudgetRoleService::canAccessDashboard($request),
+                'can_access_dashboard' => false, // Temporarily disabled for Production (Dashboard hidden)
                 'can_access_gl_actual_template' => BudgetRoleService::canAccessGlActualTemplate($request),
                 'budget_year_options' => range($currentYear - 1, $currentYear + 4),
             ]);
