@@ -37,14 +37,6 @@ services:
       DB_PASSWORD: "${DB_PASSWORD:-Tlph@2026}"
       DB_SCHEMA: "${DB_SCHEMA:-intra_tl}"
 
-      # Project Database Legacy Aliases (Django compatibility)
-      DB_DEFAULT_HOST: "${DB_DEFAULT_HOST:-192.168.99.39}"
-      DB_DEFAULT_PORT: "${DB_DEFAULT_PORT:-5435}"
-      DB_DEFAULT_NAME: "${DB_DEFAULT_NAME:-tlph}"
-      DB_DEFAULT_USER: "${DB_DEFAULT_USER:-eservices}"
-      DB_DEFAULT_PASSWORD: "${DB_DEFAULT_PASSWORD:-Tlph@2026}"
-      DB_DEFAULT_SEARCH_PATH: "${DB_DEFAULT_SEARCH_PATH:-intra_tl}"
-
       # 2. iMedX User & Branch Database (imedx_tlp / schema: public)
       DB_IMEDX_HOST: "${DB_IMEDX_HOST:-173.16.200.19}"
       DB_IMEDX_PORT: "${DB_IMEDX_PORT:-5434}"
@@ -52,8 +44,6 @@ services:
       DB_IMEDX_USERNAME: "${DB_IMEDX_USERNAME:-eservices}"
       DB_IMEDX_PASSWORD: "${DB_IMEDX_PASSWORD:-Tlp@2023}"
       DB_IMEDX_SCHEMA: "${DB_IMEDX_SCHEMA:-public}"
-      DB_IMEDX_NAME: "${DB_IMEDX_NAME:-imedx_tlp}"
-      DB_IMEDX_USER: "${DB_IMEDX_USER:-eservices}"
 
       # Reverse Proxy & SSL Trust
       TRUSTED_PROXIES: "*"

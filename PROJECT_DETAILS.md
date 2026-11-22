@@ -32,7 +32,7 @@ flowchart TD
         L13["Laravel 13 Application Framework (PHP 8.3)"]
         
         subgraph CoreServices ["Core Domain Services"]
-            AuthSvc["Imedx Dual-Auth Service<br/>(Django PBKDF2 & Bcrypt)"]
+            AuthSvc["Imedx Auth Service<br/>(Bcrypt & Legacy Hash Validator)"]
             DocSvc["14 Budget Document Engines"]
             DashSvc["Real-time P&L Consolidation Engine"]
             RoleSvc["Role-Based Access Control (RBAC)"]
@@ -63,10 +63,10 @@ flowchart TD
 
 ## 3. ระบบยืนยันตัวตนและการจัดการสิทธิ์ (Dual Auth & RBAC)
 
-### 3.1 ระบบยืนยันตัวตนแบบคู่ขนาน (Dual-Hash Authentication)
-รองรับการยืนยันตัวตนร่วมกับระบบบัญชีเดิมของ iMedX โดยไม่บังคับให้ผู้ใช้ต้องเปลี่ยนรหัสผ่าน:
-1. **Django PBKDF2 SHA-256:** ตรวจสอบรหัสผ่านเดิมที่เข้ารหัสจากระบบ Python Django
-2. **Native Bcrypt:** รองรับรหัสผ่านมาตรฐานของระบบสมัยใหม่
+### 3.1 ระบบยืนยันตัวตนและการจัดการรหัสผ่าน (Authentication Engine)
+รองรับการยืนยันตัวตนร่วมกับระบบบัญชีกลางของ iMedX ผ่าน Custom `ImedxUserProvider`:
+1. **iMedX SSO Authentication:** ตรวจสอบรหัสผ่าน MD5 และสถานะพนักงาน (`active = '1'`, `bank_sub_name`, `bank_account_note`) โดยตรงจากฐานข้อมูล iMedX
+2. **Native Bcrypt & Hash Validation:** รองรับการยืนยันรหัสผ่านบัญชีระบบมาตรฐาน PHP 8.3 & Laravel 13 โดยปลดระวางสถาปัตยกรรม Python Django ออกจากระบบโดยสมบูรณ์
 
 ### 3.2 การควบคุมสิทธิ์ตามบทบาท (Role-Based Access Control)
 - **IT-Admin / Superuser:** ดูแลความปลอดภัย, จัดการปีงบประมาณ, ควบคุมการ Freeze ระบบ, อัปเดตข้อมูลทุกสาขา

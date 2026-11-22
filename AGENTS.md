@@ -1,9 +1,9 @@
 # Project Rules & Workflow Instructions
 
-## 1. Branch & Deployment Policy
-- **UAT Environment (`c:\E-Budget`)**: Commit and push directly to branch **`uat`**.
-- **Production Environment (`c:\E-Budget_PRD`)**: Commit and push directly to branch **`main`**.
-- **Migration Branch (`migration/laravel13`)**: Dedicated development and verification branch for PHP 8.3 & Laravel 13 migration.
+## 1. Branch & Deployment Policy (PHP 8.3 & Laravel 13)
+- **UAT & Development Environment (`c:\E-Budget - PHP`)**: Commit and push directly to branch **`main`** (and sync to branch **`uat`** for UAT server).
+- **Production Environment (`c:\E-Budget_PRD_PHP`)**: Commit and push directly to branch **`main`** of `https://github.com/oat2535/E-Budget-PHP-Production.git`.
+- **Legacy Framework Status**: Python Django framework has been officially decommissioned and sunsetted. All ongoing operations are strictly PHP 8.3 & Laravel 13.
 
 ## 2. Process Cleanup & Dev Server Lifecycle
 - On Windows development environments, `php artisan serve` can leave orphaned background processes bound to port 8000 (or custom port).

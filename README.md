@@ -23,7 +23,7 @@ flowchart TD
             FPHP["FrankenPHP (Go Caddy Server + PHP 8.3 Worker Engine)"]
             
             subgraph LaravelApp ["Laravel 13 Application Core"]
-                Auth["Dual Auth Backend<br/>(Django PBKDF2 & Native Bcrypt)"]
+                Auth["Auth Engine<br/>(iMedX SSO & Native Bcrypt)"]
                 DocEngine["14 Budget Document Engines<br/>(Manpower, Equipment, Expense, Revenue)"]
                 DashboardEngine["Real-time P&L & Analytics Service"]
                 CacheSession["High-speed File Session & Cache"]
@@ -78,9 +78,10 @@ flowchart TD
   - **Back Office ประจำแผนก (เช่น `BACK-IT`):** กรองแสดงเฉพาะ Cost Center ของแผนกตนเอง (เช่น `แผนก IT`)
 - ระบบส่งออกรายงานเป็นไฟล์ **Excel (.xlsx)** แบบ Multi-sheet อัตโนมัติด้วยโครงสร้าง Zip Archive ความเร็วสูง
 
-### 2.3 ระบบยืนยันตัวตนแบบคู่ขนาน (Dual Authentication Engine)
-- เชื่อมโยงบัญชีผู้ใช้งานจากฐานข้อมูลกลาง iMedX
-- ระบบรองรับทั้งรหัสผ่านที่เข้ารหัสด้วย **Django PBKDF2 SHA-256** และ **Native Bcrypt** ผู้ใช้งานเดิมสามารถล็อกอินใช้งานได้ทันทีโดยไม่ต้องรีเซ็ตรหัสผ่าน
+### 2.3 ระบบยืนยันตัวตนและการจัดการสิทธิ์ (Authentication Engine)
+- เชื่อมโยงบัญชีผู้ใช้งานจากฐานข้อมูลกลาง iMedX โดยตรง
+- ตรวจสอบความถูกต้องของสิทธิ์และสถานะการทำงานของพนักงานแบบ Real-time
+- ปลดระวาง (Decommissioned) สถาปัตยกรรม Python Django ออกทั้งหมด ขับเคลื่อนด้วย PHP 8.3 & Laravel 13 อย่างสมบูรณ์ 100%
 
 ### 2.4 การควบคุมสิทธิ์ตามบทบาท (Role-Based Access Control - RBAC)
 - **IT-Admin / Superuser:** บริหารจัดการระบบ, กำหนดปีงบประมาณ Active, ควบคุมการ Freeze ระบบ
@@ -211,10 +212,10 @@ flowchart TD
 
 ---
 
-## 8. การกู้คืนฉุกเฉิน (Emergency Rollback)
+## 8. การกู้คืนฉุกเฉินและการควบคุมเวอร์ชัน (Disaster Recovery & Version Control)
 
-หากเกิดเหตุฉุกเฉินต้องการสลับกลับสู่เวอร์ชัน Python Django เดิม ทางทีมงานได้สร้าง Snapshot Branch ไว้:
+ระบบใช้ Git Version Control ควบคุม Source Code อย่างรัดกุม โดยทุกการ Release จะมีการติด Tag เวอร์ชัน เช่น:
 ```bash
-git checkout backup/django-prd-baseline
+git checkout tags/v1.0.0-laravel13-php83
 ```
-สามารถสลับ Deploy Container เดิมผ่าน Portainer ได้ทันที
+โครงสร้างฐานข้อมูล PostgreSQL เดิมไม่มีการแก้ไข Schema ใดๆ จึงมีความเสถียรสูงสุดและพร้อมย้อนกลับได้ทันทีหากมีข้อผิดพลาด
