@@ -27,7 +27,7 @@ class User extends Authenticatable
     {
         static::creating(function (User $user) {
             if (empty($user->date_joined)) {
-                $user->date_joined = now();
+                $user->date_joined = now()->format('Y-m-d H:i:s');
             }
         });
     }
@@ -53,8 +53,8 @@ class User extends Authenticatable
         'is_staff' => 'boolean',
         'is_superuser' => 'boolean',
         'is_active' => 'boolean',
-        'date_joined' => 'datetime',
-        'last_login' => 'datetime',
+        'date_joined' => 'datetime:Y-m-d H:i:s',
+        'last_login' => 'datetime:Y-m-d H:i:s',
     ];
 
     public ?bool $_is_admin_cached = null;

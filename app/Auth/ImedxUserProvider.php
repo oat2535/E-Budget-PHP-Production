@@ -87,7 +87,7 @@ class ImedxUserProvider implements UserProvider
                         $user->is_staff = false;
                         $user->is_superuser = false;
                         $user->is_active = true;
-                        $user->date_joined = now();
+                        $user->date_joined = now()->format('Y-m-d H:i:s');
                         $user->save();
                     } else {
                         $user->first_name = $firstName;
