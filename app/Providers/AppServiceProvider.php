@@ -4,8 +4,11 @@ namespace App\Providers;
 
 use App\Auth\ImedxUserProvider;
 use App\Models\SystemSetting;
+use App\Models\User;
 use App\Services\BudgetRoleService;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -38,6 +41,13 @@ class AppServiceProvider extends ServiceProvider
 
         Auth::provider('imedx', function ($app, array $config) {
             return new ImedxUserProvider();
+        });
+
+        Event::listen(Login::class, function (Login $event) {
+            if ($event->user instanceof User) {
+                $event->user->last_login = now()->format('Y-m-d H:i:s');
+                $event->user->saveQuietly();
+            }
         });
 
         View::composer('*', function ($view) {

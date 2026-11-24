@@ -122,6 +122,24 @@ class AuthTest extends TestCase
             $saved = User::where('username', 'ratchadaporn_p')->first();
             $this->assertNotNull($saved);
             $this->assertEquals('ratchadaporn_p', $saved->username);
+            $this->assertNotNull($saved->last_login);
+            $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $saved->last_login->format('Y-m-d H:i:s'));
+        }
+    }
+
+    public function test_login_event_updates_last_login_timestamp_zero(): void
+    {
+        $admin = User::where('username', 'admin')->first();
+        if ($admin) {
+            $admin->last_login = null;
+            $admin->saveQuietly();
+
+            event(new \Illuminate\Auth\Events\Login('web', $admin, false));
+
+            $admin->refresh();
+            $this->assertNotNull($admin->last_login);
+            $formatted = $admin->last_login->format('Y-m-d H:i:s');
+            $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $formatted);
         }
     }
 }

@@ -61,6 +61,11 @@ class AuthController extends Controller
             $request->session()->regenerate();
             $user = Auth::user();
 
+            if ($user instanceof \App\Models\User) {
+                $user->last_login = now()->format('Y-m-d H:i:s');
+                $user->save();
+            }
+
             $branchInfo = BudgetRoleService::getBranchInfoFromImedx($user->username);
             $request->session()->put('branch_info', $branchInfo);
             $request->session()->put('_imedx_profile_last_checked', time());
