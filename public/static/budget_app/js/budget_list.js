@@ -334,8 +334,8 @@ const BudgetApp = (function() {
                         generalLedgersByDocType = data.by_doc_type;
                     } else {
                         generalLedgersByDocType = {
-                            'GL Entry': allGeneralLedgers.filter(g => (g.gl_name || '').startsWith('ค่าเสื่อม')),
-                            'EXPENSE': allGeneralLedgers.filter(g => (g.gl_name || '').startsWith('ค่าเสื่อม')),
+                            'GL Entry': allGeneralLedgers.filter(g => !(g.gl_name || '').startsWith('ค่าเสื่อม')),
+                            'EXPENSE': allGeneralLedgers.filter(g => !(g.gl_name || '').startsWith('ค่าเสื่อม')),
                             'Revenue': allGeneralLedgers.filter(g => (g.gl_name || '').startsWith('รายได้')),
                             'Budget Plan': allGeneralLedgers,
                         };

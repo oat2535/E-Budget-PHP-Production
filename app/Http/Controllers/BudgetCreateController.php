@@ -651,7 +651,7 @@ class BudgetCreateController extends Controller
         }
 
         return view('budget.budget_add_gl_entry', array_merge([
-            'general_ledgers_json' => BudgetService::getGeneralLedgersJson(null, 'ค่าเสื่อม'),
+            'general_ledgers_json' => BudgetService::getGeneralLedgersJson(null, null, 'ค่าเสื่อม'),
             'cost_centers_json' => BudgetService::getCostCentersJson(),
         ], BudgetRoleService::getBranchSelectionContext($request)));
     }

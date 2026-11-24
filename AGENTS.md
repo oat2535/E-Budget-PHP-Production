@@ -22,3 +22,8 @@
 - Adhere strictly to clean architecture, performance optimization, and rock-solid stability.
 - Always verify changes end-to-end via automated tests (`php artisan test`) before committing and pushing.
 - Never alter or drop existing PostgreSQL tables in `imedx_tlp_for_it` (`intra_tl`) or `imedx_uat` (`public`).
+
+## 5. Domain & Business Rules
+- **Expense (GL Entry / ค่าใช้จ่ายต่างๆ / C02 Expense) GL Filtering Rule**:
+  - ในหน้า Expense (ทั้งหน้าสร้าง `/add_gl_entry`, หน้าแก้ไขเอกสาร C02 / GL Entry, และ API `/api/general_ledgers` สำหรับ `GL Entry` และ `EXPENSE`) **จะต้องกรองเอา GL ที่ขึ้นต้นด้วยคำว่า `ค่าเสื่อม%` ออกทั้งหมด (Exclude)** ห้ามนำมาแสดงเป็นตัวเลือกโดยเด็ดขาด เนื่องจากค่าเสื่อมราคาจะถูกคำนวณและจัดการจากฝั่ง Asset และระบบคำนวณเฉพาะแยกต่างหาก
+  - ใช้ `BudgetService::getGeneralLedgersJson(null, null, 'ค่าเสื่อม')` เสมอ ห้ามส่ง `'ค่าเสื่อม'` เป็น parameter ตัวที่สอง (`$nameStartswith`) เป็นอันขาด

@@ -1017,7 +1017,7 @@ class BudgetDocumentApiController extends Controller
         $nameStartswith = $request->query('name_startswith');
 
         $allGls = BudgetService::getGeneralLedgersJson();
-        $expenseGls = BudgetService::getGeneralLedgersJson(null, 'ค่าเสื่อม');
+        $expenseGls = BudgetService::getGeneralLedgersJson(null, null, 'ค่าเสื่อม');
         $revenueGls = BudgetService::getGeneralLedgersJson(null, 'รายได้');
 
         if ($docType === 'GL Entry' || $docType === 'EXPENSE') {

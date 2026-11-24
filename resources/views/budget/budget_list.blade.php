@@ -856,5 +856,5 @@
         needsBranchSelection: {{ ($needs_branch_selection ?? false) ? 'true' : 'false' }}
     };
 </script>
-<script src="{{ asset('static/budget_app/js/budget_list.js') }}?v=20261120_05"></script>
+<script src="{{ asset('static/budget_app/js/budget_list.js') }}?v=20261124_02"></script>
 @endsection
