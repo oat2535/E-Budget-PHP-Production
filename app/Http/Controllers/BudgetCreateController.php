@@ -89,7 +89,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'VET');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -106,7 +106,7 @@ class BudgetCreateController extends Controller
 
                 $docNo = BudgetService::generateDocumentNo('VET');
 
-                DB::connection('pgsql')->transaction(function () use ($data, $user, $branchId, $deptId, $docNo, $masterFks, $budgetYear) {
+                DB::connection('pgsql')->transaction(function () use ($data, $user, $branchId, $docNo, $masterFks, $budgetYear) {
                     foreach ($data as $item) {
                         [$masterObj, $glCode] = $masterFks[$item['position_name']] ?? [null, null];
                         $obj = VetManpower::create([
@@ -115,7 +115,7 @@ class BudgetCreateController extends Controller
                             'salary' => $item['salary'],
                             'create_eid' => $user->username,
                             'base_branch_id' => $branchId,
-                            'department_id' => $deptId,
+                            'department_id' => null,
                             'cost_center_name' => $item['cost_center_name'] ?? null,
                             'document_no' => $docNo,
                             'item_master_id' => $masterObj ? $masterObj->id : null,
@@ -198,7 +198,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'NON VET');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -327,7 +327,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'Position Adjustment');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -477,7 +477,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, $docType);
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -606,7 +606,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'GL Entry');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -679,7 +679,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'Revenue');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(
@@ -752,7 +752,7 @@ class BudgetCreateController extends Controller
                 unset($it);
 
                 $user = $request->user();
-                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data);
+                [$branchId, $deptId] = BudgetRoleService::resolveBranchForCreate($request, $data, 'Budget Plan');
                 $budgetYear = SystemSetting::current()->active_budget_year;
 
                 $duplicateResp = BudgetService::checkDuplicateBudgetDocument(

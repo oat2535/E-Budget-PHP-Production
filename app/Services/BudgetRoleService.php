@@ -495,16 +495,48 @@ class BudgetRoleService
         ];
     }
 
-    public static function resolveBranchForCreate(Request $request, array $data): array
+    /**
+     * Resolves canonical department_id for a document based on creator's iMedX bank_sub_name and doc_type.
+     * Business rules:
+     * 1. VET Manpower is strictly hospital/branch veterinarian doctors - NEVER has department_id (always null).
+     * 2. Only users whose iMedX bank_sub_name starts with or contains 'BACK-' (back-office departments) have department_id.
+     * 3. Branch employees (e.g. R2, R6, RY, etc.) must NEVER have department_id (always null).
+     */
+    public static function resolveDepartmentForCreator(?string $creatorUsername, ?string $docType = null, ?string $branchCode = null): ?string
+    {
+        $normalizedType = strtoupper(trim((string) $docType));
+        if ($normalizedType === 'VET' || $normalizedType === 'VET MANPOWER') {
+            return null;
+        }
+
+        if (! $creatorUsername) {
+            return null;
+        }
+
+        $info = self::getBranchInfoFromImedx($creatorUsername);
+        $bankSubName = (string) ($info['bank_sub_name'] ?? '');
+
+        if (! str_contains(strtoupper($bankSubName), 'BACK')) {
+            return null;
+        }
+
+        return $info['department_id'] ?? null;
+    }
+
+    public static function resolveBranchForCreate(Request $request, array $data, ?string $docType = null): array
     {
         $info = self::getBranchInfo($request);
         $branches = $info['branches'] ?? [];
-        $deptId = $info['department_id'] ?? null;
         $user = $request->user();
+        $deptId = self::resolveDepartmentForCreator($user?->username, $docType);
 
         if ($user && self::isPrivilegedUserAccount($user, $request)) {
             $chosen = ! empty($data[0]['branch_code']) ? trim($data[0]['branch_code']) : null;
             if ($chosen) {
+                // If privileged user creates document for a hospital branch (not HO) for manpower, deptId must be null
+                if ($chosen !== 'HO' && in_array(strtoupper((string) $docType), ['VET', 'VET MANPOWER', 'NON VET', 'NON VET MANPOWER', 'POSITION ADJUSTMENT'], true)) {
+                    $deptId = null;
+                }
                 return [$chosen, $deptId];
             }
             if (! empty($branches)) {

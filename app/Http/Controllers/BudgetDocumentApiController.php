@@ -465,7 +465,23 @@ class BudgetDocumentApiController extends Controller
         }
 
         $budgetYear = $firstItem->budget_year;
-        $deptId = $firstItem->department_id;
+
+        // Resolve canonical department_id:
+        // 1. VET Manpower is strictly hospital veterinarian doctors - NEVER has department_id (always null).
+        // 2. If the document's creator (create_eid) is not a BACK- department employee in iMedX, department_id MUST be null.
+        // 3. Otherwise, preserve existing department_id or resolve creator's department.
+        $normType = strtoupper(trim($docType));
+        if ($normType === 'VET' || $normType === 'VET MANPOWER') {
+            $deptId = null;
+        } else {
+            $creatorDept = BudgetRoleService::resolveDepartmentForCreator($firstItem->create_eid, $docType, $baseBranchId);
+            if ($creatorDept === null) {
+                // Document creator is a branch employee (not BACK-dept) -> department_id must NOT be recorded
+                $deptId = null;
+            } else {
+                $deptId = $firstItem->department_id ?: $creatorDept;
+            }
+        }
 
         // Canonical cost center name resolution
         if (! empty($data[0]['cost_center_name'])) {

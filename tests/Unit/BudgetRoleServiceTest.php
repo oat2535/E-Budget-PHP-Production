@@ -82,4 +82,13 @@ class BudgetRoleServiceTest extends TestCase
         $regularUser->is_superuser = false;
         // In unit test without DB connection, defaults to non-privileged unless mocked
     }
+
+    public function test_resolve_department_for_creator_vet_always_null(): void
+    {
+        $this->assertNull(BudgetRoleService::resolveDepartmentForCreator('thidarat', 'VET'));
+        $this->assertNull(BudgetRoleService::resolveDepartmentForCreator('pattida_y', 'VET'));
+        $this->assertNull(BudgetRoleService::resolveDepartmentForCreator('pattida_y', 'Vet Manpower'));
+        $this->assertNull(BudgetRoleService::resolveDepartmentForCreator(null, 'VET'));
+        $this->assertNull(BudgetRoleService::resolveDepartmentForCreator(null, 'GL Entry'));
+    }
 }

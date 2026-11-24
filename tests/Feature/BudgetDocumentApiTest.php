@@ -126,4 +126,100 @@ class BudgetDocumentApiTest extends TestCase
             'message' => 'ไม่พบเอกสาร',
         ]);
     }
+
+    public function test_update_vet_manpower_document_always_ensures_department_id_is_null(): void
+    {
+        $docNo = 'TEST-VET-DEPT-001';
+        $oldIds = VetManpower::where('document_no', $docNo)->pluck('id');
+        \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $oldIds)->delete();
+        VetManpower::where('document_no', $docNo)->delete();
+
+        $item = VetManpower::create([
+            'document_no' => $docNo,
+            'position_name' => 'สัตวแพทย์ทั่วไป',
+            'salary' => 300.00,
+            'base_branch_id' => 'R2',
+            'department_id' => 'ACC', // Staged with invalid legacy 'ACC'
+            'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
+            'create_eid' => 'thidarat',
+            'modify_eid' => 'thidarat',
+            'status' => VetManpower::STATUS_PENDING,
+            'budget_year' => 2026,
+        ]);
+
+        $editor = new User(['username' => 'thidarat']);
+        $editor->bank_account_note = 'MANAGER';
+
+        $payload = [
+            [
+                'id' => $item->id,
+                'position_name' => 'สัตวแพทย์ทั่วไป',
+                'salary' => 300.00,
+                'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
+                'monthly_data' => [
+                    'jan' => ['headcount' => 1, 'cost' => 30000],
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($editor)->postJson("/api/document/update/VET/{$docNo}", $payload);
+        $response->assertStatus(200);
+        $response->assertJson(['status' => 'success']);
+
+        $updatedItem = VetManpower::where('document_no', $docNo)->first();
+        $this->assertNotNull($updatedItem);
+        $this->assertNull($updatedItem->department_id, 'VET Manpower department_id must be null after update');
+
+        $cleanIds = VetManpower::where('document_no', $docNo)->pluck('id');
+        \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $cleanIds)->delete();
+        VetManpower::where('document_no', $docNo)->delete();
+    }
+
+    public function test_update_branch_document_by_admin_does_not_inject_admin_department_id(): void
+    {
+        $docNo = 'TEST-VET-ADMIN-DEPT-002';
+        $oldIds = VetManpower::where('document_no', $docNo)->pluck('id');
+        \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $oldIds)->delete();
+        VetManpower::where('document_no', $docNo)->delete();
+
+        $item = VetManpower::create([
+            'document_no' => $docNo,
+            'position_name' => 'สัตวแพทย์ทั่วไป',
+            'salary' => 300.00,
+            'base_branch_id' => 'R2',
+            'department_id' => null,
+            'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
+            'create_eid' => 'thidarat',
+            'modify_eid' => 'thidarat',
+            'status' => VetManpower::STATUS_PENDING,
+            'budget_year' => 2026,
+        ]);
+
+        $admin = new User(['username' => 'pattida_y']);
+        $admin->bank_account_note = 'ACC-ADMIN';
+
+        $payload = [
+            [
+                'id' => $item->id,
+                'position_name' => 'สัตวแพทย์ทั่วไป',
+                'salary' => 300.00,
+                'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
+                'monthly_data' => [
+                    'jan' => ['headcount' => 1, 'cost' => 30000],
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($admin)->postJson("/api/document/update/VET/{$docNo}", $payload);
+        $response->assertStatus(200);
+        $response->assertJson(['status' => 'success']);
+
+        $updatedItem = VetManpower::where('document_no', $docNo)->first();
+        $this->assertNotNull($updatedItem);
+        $this->assertNull($updatedItem->department_id, 'Branch document department_id must not be overwritten by admin department');
+
+        $cleanIds = VetManpower::where('document_no', $docNo)->pluck('id');
+        \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $cleanIds)->delete();
+        VetManpower::where('document_no', $docNo)->delete();
+    }
 }
