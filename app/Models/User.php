@@ -13,6 +13,25 @@ class User extends Authenticatable
     protected $table = 'auth_user';
     public $timestamps = false;
 
+    protected $attributes = [
+        'first_name' => '',
+        'last_name' => '',
+        'email' => '',
+        'password' => '!',
+        'is_staff' => false,
+        'is_superuser' => false,
+        'is_active' => true,
+    ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            if (empty($user->date_joined)) {
+                $user->date_joined = now();
+            }
+        });
+    }
+
     protected $fillable = [
         'username',
         'first_name',

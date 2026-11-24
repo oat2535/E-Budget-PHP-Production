@@ -84,4 +84,44 @@ class AuthTest extends TestCase
         $response->assertRedirect(route('login', ['session_expired' => 1]));
         $this->assertGuest();
     }
+
+    public function test_imedx_first_time_login_creates_local_auth_user(): void
+    {
+        // Test that User model creation with default attributes satisfies all auth_user not-null constraints
+        User::where('username', 'test_new_user_audit')->delete();
+
+        $user = new User();
+        $user->username = 'test_new_user_audit';
+        $user->first_name = 'Test';
+        $user->last_name = 'User';
+        $user->save();
+
+        $this->assertNotNull($user->id);
+        $this->assertEquals('!', $user->password);
+        $this->assertNotNull($user->date_joined);
+        $this->assertEquals('', $user->email);
+
+        $user->delete();
+
+        // If running against UAT database where ratchadaporn_p has password 1234 and active profile
+        $emp = \Illuminate\Support\Facades\DB::connection('pgsql_imedx')->selectOne("
+            SELECT password, bank_sub_name, bank_account_note, active FROM employee WHERE LOWER(TRIM(employee_id)) = 'ratchadaporn_p'
+        ");
+
+        if ($emp && strtolower(trim((string)$emp->password)) === md5('1234') && !empty($emp->bank_sub_name) && !empty($emp->bank_account_note)) {
+            User::where('username', 'ratchadaporn_p')->delete();
+
+            $response = $this->post('/login', [
+                'username' => 'ratchadaporn_p',
+                'password' => '1234',
+            ]);
+
+            $response->assertRedirect(route('budget_list'));
+            $this->assertAuthenticated();
+
+            $saved = User::where('username', 'ratchadaporn_p')->first();
+            $this->assertNotNull($saved);
+            $this->assertEquals('ratchadaporn_p', $saved->username);
+        }
+    }
 }

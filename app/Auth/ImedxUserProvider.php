@@ -72,17 +72,32 @@ class ImedxUserProvider implements UserProvider
                     }
 
                     // Get or create local user
-                    $user = User::firstOrCreate(['username' => $username]);
                     $firstNameStr = trim(($employee->prename ?? '') . ($employee->firstname ?? ''));
-                    $user->first_name = mb_substr($firstNameStr, 0, 150);
-                    $user->last_name = mb_substr(trim((string) ($employee->lastname ?? '')), 0, 150);
-                    $user->password = '!'; // unusable password
-                    $user->is_staff = false;
-                    $user->is_superuser = false;
-                    $user->is_active = true;
+                    $firstName = mb_substr($firstNameStr, 0, 150);
+                    $lastName = mb_substr(trim((string) ($employee->lastname ?? '')), 0, 150);
+
+                    $user = User::where('username', $username)->first();
+                    if (! $user) {
+                        $user = new User();
+                        $user->username = $username;
+                        $user->first_name = $firstName;
+                        $user->last_name = $lastName;
+                        $user->email = '';
+                        $user->password = '!'; // unusable password
+                        $user->is_staff = false;
+                        $user->is_superuser = false;
+                        $user->is_active = true;
+                        $user->date_joined = now();
+                        $user->save();
+                    } else {
+                        $user->first_name = $firstName;
+                        $user->last_name = $lastName;
+                        $user->is_active = true;
+                        $user->save();
+                    }
+
                     $user->bank_sub_name = $subNameClean;
                     $user->bank_account_note = $accountNoteClean;
-                    $user->save();
 
                     // Pre-cache branch_info in session
                     $branchInfo = BudgetRoleService::getBranchInfoFromImedx($username);
