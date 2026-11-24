@@ -97,6 +97,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('DB_SCHEMA') ?: env('DB_DEFAULT_SEARCH_PATH') ?: 'intra_tl',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'timezone' => env('DB_TIMEZONE', 'Asia/Bangkok'),
         ],
 
         'pgsql_imedx' => [

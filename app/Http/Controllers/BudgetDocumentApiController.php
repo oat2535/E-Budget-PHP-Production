@@ -84,8 +84,8 @@ class BudgetDocumentApiController extends Controller
                     ->groupBy('document_no');
 
                 foreach ($docs as $docNo => $rows) {
-                    $first = $rows->first();
-                    $createDate = $rows->max('create_date');
+                    $first = $rows->sortBy('id')->first() ?? $rows->first();
+                    $createDate = $rows->min('create_date') ?? $first->create_date;
                     $dt = $createDate ? Carbon::parse($createDate) : null;
                     $totalBudget = 0.0;
                     foreach ($rows as $r) {
@@ -98,12 +98,12 @@ class BudgetDocumentApiController extends Controller
                         'document_no' => $docNo ?: '-',
                         'create_date_raw' => $dt ? $dt->toISOString() : '',
                         'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                        'create_eid' => $rows->max('create_eid') ?: '-',
+                        'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                         'total_positions' => $rows->count(),
-                        'budget_year' => $rows->max('budget_year') ?: '-',
+                        'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                         'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                        'base_branch_id' => $rows->max('base_branch_id') ?: '-',
-                        'cost_center_name' => $rows->max('cost_center_name') ?: '-',
+                        'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
+                        'cost_center_name' => $first->cost_center_name ?: ($rows->max('cost_center_name') ?: '-'),
                         'total_budget' => round($totalBudget, 2),
                         'type' => $t['type'],
                     ];
@@ -129,7 +129,8 @@ class BudgetDocumentApiController extends Controller
                     ->groupBy('document_no');
 
                 foreach ($docs as $docNo => $rows) {
-                    $createDate = $rows->max('create_date');
+                    $first = $rows->sortBy('id')->first() ?? $rows->first();
+                    $createDate = $rows->min('create_date') ?? $first->create_date;
                     $dt = $createDate ? Carbon::parse($createDate) : null;
                     $totalBudget = 0.0;
                     foreach ($rows as $r) {
@@ -142,12 +143,12 @@ class BudgetDocumentApiController extends Controller
                         'document_no' => $docNo ?: '-',
                         'create_date_raw' => $dt ? $dt->toISOString() : '',
                         'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                        'create_eid' => $rows->max('create_eid') ?: '-',
+                        'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                         'total_positions' => $rows->count(),
-                        'budget_year' => $rows->max('budget_year') ?: '-',
+                        'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                         'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                        'base_branch_id' => $rows->max('base_branch_id') ?: '-',
-                        'cost_center_name' => $rows->max('cost_center_name') ?: '-',
+                        'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
+                        'cost_center_name' => $first->cost_center_name ?: ($rows->max('cost_center_name') ?: '-'),
                         'total_budget' => round($totalBudget, 2),
                         'type' => $t['type'],
                     ];
@@ -159,7 +160,8 @@ class BudgetDocumentApiController extends Controller
             BudgetRoleService::applyDocumentVisibilityFilter($glQuery, $request);
             $glDocs = $glQuery->with('monthlyDetails')->get()->groupBy('document_no');
             foreach ($glDocs as $docNo => $rows) {
-                $createDate = $rows->max('create_date');
+                $first = $rows->sortBy('id')->first() ?? $rows->first();
+                $createDate = $rows->min('create_date') ?? $first->create_date;
                 $dt = $createDate ? Carbon::parse($createDate) : null;
                 $totalBudget = 0.0;
                 foreach ($rows as $r) {
@@ -171,12 +173,12 @@ class BudgetDocumentApiController extends Controller
                     'document_no' => $docNo ?: '-',
                     'create_date_raw' => $dt ? $dt->toISOString() : '',
                     'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                    'create_eid' => $rows->max('create_eid') ?: '-',
+                    'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                     'total_positions' => $rows->count(),
-                    'budget_year' => $rows->max('budget_year') ?: '-',
+                    'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                     'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                    'base_branch_id' => $rows->max('base_branch_id') ?: '-',
-                    'cost_center_name' => $rows->max('cost_center_name') ?: '-',
+                    'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
+                    'cost_center_name' => $first->cost_center_name ?: ($rows->max('cost_center_name') ?: '-'),
                     'total_budget' => round($totalBudget, 2),
                     'type' => 'GL Entry',
                 ];
@@ -187,7 +189,8 @@ class BudgetDocumentApiController extends Controller
             BudgetRoleService::applyDocumentVisibilityFilter($revQuery, $request);
             $revDocs = $revQuery->with('monthlyDetails')->get()->groupBy('document_no');
             foreach ($revDocs as $docNo => $rows) {
-                $createDate = $rows->max('create_date');
+                $first = $rows->sortBy('id')->first() ?? $rows->first();
+                $createDate = $rows->min('create_date') ?? $first->create_date;
                 $dt = $createDate ? Carbon::parse($createDate) : null;
                 $totalBudget = 0.0;
                 foreach ($rows as $r) {
@@ -199,12 +202,12 @@ class BudgetDocumentApiController extends Controller
                     'document_no' => $docNo ?: '-',
                     'create_date_raw' => $dt ? $dt->toISOString() : '',
                     'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                    'create_eid' => $rows->max('create_eid') ?: '-',
+                    'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                     'total_positions' => $rows->count(),
-                    'budget_year' => $rows->max('budget_year') ?: '-',
+                    'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                     'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                    'base_branch_id' => $rows->max('base_branch_id') ?: '-',
-                    'cost_center_name' => $rows->max('cost_center_name') ?: '-',
+                    'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
+                    'cost_center_name' => $first->cost_center_name ?: ($rows->max('cost_center_name') ?: '-'),
                     'total_budget' => round($totalBudget, 2),
                     'type' => 'Revenue',
                 ];
@@ -215,7 +218,8 @@ class BudgetDocumentApiController extends Controller
             BudgetRoleService::applyDocumentVisibilityFilter($planQuery, $request);
             $planDocs = $planQuery->with('monthlyDetails')->get()->groupBy('document_no');
             foreach ($planDocs as $docNo => $rows) {
-                $createDate = $rows->max('create_date');
+                $first = $rows->sortBy('id')->first() ?? $rows->first();
+                $createDate = $rows->min('create_date') ?? $first->create_date;
                 $dt = $createDate ? Carbon::parse($createDate) : null;
                 $totalBudget = 0.0;
                 foreach ($rows as $r) {
@@ -227,12 +231,12 @@ class BudgetDocumentApiController extends Controller
                     'document_no' => $docNo ?: '-',
                     'create_date_raw' => $dt ? $dt->toISOString() : '',
                     'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                    'create_eid' => $rows->max('create_eid') ?: '-',
+                    'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                     'total_positions' => $rows->count(),
-                    'budget_year' => $rows->max('budget_year') ?: '-',
+                    'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                     'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                    'base_branch_id' => $rows->max('base_branch_id') ?: '-',
-                    'cost_center_name' => $rows->max('cost_center_name') ?: '-',
+                    'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
+                    'cost_center_name' => $first->cost_center_name ?: ($rows->max('cost_center_name') ?: '-'),
                     'total_budget' => round($totalBudget, 2),
                     'type' => 'Budget Plan',
                 ];
@@ -243,7 +247,8 @@ class BudgetDocumentApiController extends Controller
             BudgetRoleService::applyDocumentVisibilityFilter($glatQuery, $request);
             $glatDocs = $glatQuery->get()->groupBy('document_no');
             foreach ($glatDocs as $docNo => $rows) {
-                $createDate = $rows->max('create_date');
+                $first = $rows->sortBy('id')->first() ?? $rows->first();
+                $createDate = $rows->min('create_date') ?? $first->create_date;
                 $dt = $createDate ? Carbon::parse($createDate) : null;
                 $totalBudget = (float) $rows->sum('annualized_value');
 
@@ -251,11 +256,11 @@ class BudgetDocumentApiController extends Controller
                     'document_no' => $docNo ?: '-',
                     'create_date_raw' => $dt ? $dt->toISOString() : '',
                     'create_date' => $dt ? $dt->format('d/m/Y H:i') : '-',
-                    'create_eid' => $rows->max('create_eid') ?: '-',
+                    'create_eid' => $first->create_eid ?: ($rows->min('create_eid') ?: '-'),
                     'total_positions' => $rows->count(),
-                    'budget_year' => $rows->max('budget_year') ?: '-',
+                    'budget_year' => $first->budget_year ?: ($rows->max('budget_year') ?: '-'),
                     'status' => $rows->max('status') ?: self::STATUS_PENDING,
-                    'base_branch_id' => $rows->max('base_branch_id') ?: '-',
+                    'base_branch_id' => $first->base_branch_id ?: ($rows->max('base_branch_id') ?: '-'),
                     'cost_center_name' => '-',
                     'total_budget' => round($totalBudget, 2),
                     'type' => 'GL Actual Template',
@@ -460,8 +465,6 @@ class BudgetDocumentApiController extends Controller
         }
 
         $budgetYear = $firstItem->budget_year;
-        $createDate = $firstItem->create_date;
-        $createEid = $firstItem->create_eid;
         $deptId = $firstItem->department_id;
 
         // Canonical cost center name resolution
@@ -602,7 +605,7 @@ class BudgetDocumentApiController extends Controller
         try {
             DB::connection('pgsql')->transaction(function () use (
                 $docType, $docNo, $data, $modelClass, $existingItems, $baseBranchId,
-                $deptId, $budgetYear, $createDate, $createEid, $user, $masterFks,
+                $deptId, $budgetYear, $user, $masterFks,
                 $glMasterFields, $equipmentSubcatMap, $vetFks, $nonVetFks
             ) {
                 $existingMap = $existingItems->keyBy('id');
@@ -662,8 +665,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
@@ -690,8 +693,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
@@ -719,8 +722,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
@@ -746,8 +749,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
@@ -777,8 +780,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
@@ -812,8 +815,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $modelClass::create($fields);
@@ -842,8 +845,8 @@ class BudgetDocumentApiController extends Controller
                         } else {
                             $fields = array_merge($fields, [
                                 'document_no' => $docNo,
-                                'create_date' => $createDate,
-                                'create_eid' => $createEid,
+                                'create_date' => now(),
+                                'create_eid' => $user->username,
                                 'status' => $docStatus,
                             ]);
                             $obj = $modelClass::create($fields);
