@@ -499,7 +499,7 @@
                             <i data-feather="alert-circle" class="me-2"></i><strong>เหตุผลการยกเลิก:</strong> <span id="modalCancelReasonText"></span>
                         </div>
 
-                        <h6 class="text-primary mb-3"><i data-feather="users" class="me-2"></i>รายละเอียดกำลังคน (Manpower Details)</h6>
+                        <h6 id="modalSectionTitle" class="text-primary mb-3"><i data-feather="users" class="me-2"></i>รายละเอียดกำลังคน (Manpower Details)</h6>
                         <div class="card mb-3 card-soft">
                             <div class="card-header bg-light fw-bold text-dark d-flex justify-content-between align-items-center">
                                 <span id="modalTable1HeaderTitle">ตารางส่วนแรก (จำนวนคน)</span>
@@ -575,7 +575,7 @@
                                 <tbody>
                                     <tr>
                                         <td id="adjModalDocNo"></td>
-                                        <td id="adjModalDocType"><span class="badge bg-info">Position Adjustment</span></td>
+                                        <td id="adjModalDocType"><span class="badge badge-doc-type" style="background-color: #06b6d4;">Position Adjustment</span></td>
                                         <td id="adjModalDocBranch"></td>
                                         <td id="adjModalDocCostCenter"></td>
                                         <td id="adjModalDocBudgetYear"></td>
@@ -591,7 +591,7 @@
                             <i data-feather="alert-circle" class="me-2"></i><strong>เหตุผลการยกเลิก:</strong> <span id="adjModalCancelReasonText"></span>
                         </div>
 
-                        <h6 class="text-primary mb-3"><i data-feather="users" class="me-2"></i>รายละเอียดกำลังคน (Manpower Details)</h6>
+                        <h6 id="adjModalSectionTitle" class="text-primary mb-3"><i data-feather="users" class="me-2"></i>รายละเอียดกำลังคน (Manpower Details)</h6>
                         <!-- Table 1: Headcount -->
                         <div class="card mb-3 card-soft">
                             <div class="card-header bg-light fw-bold text-dark d-flex justify-content-between align-items-center">
@@ -767,7 +767,7 @@
                                 <tbody>
                                     <tr>
                                         <td id="glatModalDocNo"></td>
-                                        <td><span class="badge" style="background-color: #6f42c1;">GL Actual Template</span></td>
+                                        <td id="glatModalDocType"><span class="badge badge-doc-type" style="background-color: #7c3aed;">GL Actual Template</span></td>
                                         <td id="glatModalDocBranch"></td>
                                         <td id="glatModalActualYear"></td>
                                         <td id="glatModalDocBudgetYear"></td>
@@ -856,5 +856,5 @@
         needsBranchSelection: {{ ($needs_branch_selection ?? false) ? 'true' : 'false' }}
     };
 </script>
-<script src="{{ asset('static/budget_app/js/budget_list.js') }}?v=20261124_02"></script>
+<script src="{{ asset('static/budget_app/js/budget_list.js') }}?v=20261126_01"></script>
 @endsection

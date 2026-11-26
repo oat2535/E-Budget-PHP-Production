@@ -733,6 +733,44 @@ const BudgetApp = (function() {
 
      // Store raw data for fast client-side filtering
 
+    function getDocTypeBadgeHtml(type) {
+        switch (type) {
+            case 'VET':
+                return '<span class="badge badge-doc-type" style="background-color: #0d6efd;">VET</span>';
+            case 'NON VET':
+                return '<span class="badge badge-doc-type" style="background-color: #6d28d9;">NON VET</span>';
+            case 'Position Adjustment':
+                return '<span class="badge badge-doc-type" style="background-color: #06b6d4;">Position Adjustment</span>';
+            case 'Medical Equipment':
+                return '<span class="badge badge-doc-type" style="background-color: #198754;">Medical Equipment</span>';
+            case 'Computer Equipment':
+                return '<span class="badge badge-doc-type" style="background-color: #d97706;">Computer Equipment</span>';
+            case 'Furniture':
+                return '<span class="badge badge-doc-type" style="background-color: #581c87;">Furniture</span>';
+            case 'Tools & Equipment':
+            case 'Tools Equipment':
+                return '<span class="badge badge-doc-type" style="background-color: #1e293b;">Tools & Equipment</span>';
+            case 'CAR':
+            case 'Car':
+                return '<span class="badge badge-doc-type" style="background-color: #fd7e14;">CAR</span>';
+            case 'Renovate':
+                return '<span class="badge badge-doc-type" style="background-color: #be185d;">Renovate</span>';
+            case 'Software':
+                return '<span class="badge badge-doc-type" style="background-color: #0284c7;">Software</span>';
+            case 'GL Entry':
+            case 'EXPENSE':
+                return '<span class="badge badge-doc-type" style="background-color: #0891b2;">EXPENSE</span>';
+            case 'Revenue':
+                return '<span class="badge badge-doc-type" style="background-color: #65a30d;">Revenue</span>';
+            case 'Budget Plan':
+                return '<span class="badge badge-doc-type" style="background-color: #0d9488;">Budget Plan</span>';
+            case 'GL Actual Template':
+                return '<span class="badge badge-doc-type" style="background-color: #7c3aed;">GL Actual Template</span>';
+            default:
+                return `<span class="badge badge-doc-type" style="background-color: #6d28d9;">${type || 'NON VET'}</span>`;
+        }
+    }
+
     function renderDataTable(dataArray) {
         if (dataTable) {
             try {
@@ -767,21 +805,7 @@ const BudgetApp = (function() {
         if (dataArray && dataArray.length > 0) {
             let rowsHtml = '';
             dataArray.forEach(doc => {
-                const catBadge = doc.type === 'VET' ?
-                    '<span class="badge badge-doc-type" style="background-color: #0d6efd;">VET</span>' :
-                    doc.type === 'Position Adjustment' ? '<span class="badge badge-doc-type" style="background-color: #06b6d4;">Position Adjustment</span>' :
-                    doc.type === 'Medical Equipment' ? '<span class="badge badge-doc-type" style="background-color: #198754;">Medical Equipment</span>' :
-                    doc.type === 'Computer Equipment' ? '<span class="badge badge-doc-type" style="background-color: #d97706;">Computer Equipment</span>' :
-                    doc.type === 'Furniture' ? '<span class="badge badge-doc-type" style="background-color: #581c87;">Furniture</span>' :
-                    doc.type === 'Tools & Equipment' ? '<span class="badge badge-doc-type" style="background-color: #1e293b;">Tools & Equipment</span>' :
-                    doc.type === 'CAR' ? '<span class="badge badge-doc-type" style="background-color: #fd7e14;">CAR</span>' :
-                    doc.type === 'Renovate' ? '<span class="badge badge-doc-type" style="background-color: #be185d;">Renovate</span>' :
-                    doc.type === 'Software' ? '<span class="badge badge-doc-type" style="background-color: #0284c7;">Software</span>' :
-                    doc.type === 'GL Entry' ? '<span class="badge badge-doc-type" style="background-color: #0891b2;">EXPENSE</span>' :
-                    doc.type === 'Revenue' ? '<span class="badge badge-doc-type" style="background-color: #65a30d;">Revenue</span>' :
-                    doc.type === 'Budget Plan' ? '<span class="badge badge-doc-type" style="background-color: #0d9488;">Budget Plan</span>' :
-                    doc.type === 'GL Actual Template' ? '<span class="badge badge-doc-type" style="background-color: #7c3aed;">GL Actual Template</span>' :
-                    '<span class="badge badge-doc-type" style="background-color: #6d28d9;">NON VET</span>';
+                const catBadge = getDocTypeBadgeHtml(doc.type);
                 const isGeneralLedgerDoc = doc.type === 'GL Entry' || doc.type === 'Revenue' || doc.type === 'Budget Plan';
                 const isGlatDoc = doc.type === 'GL Actual Template';
                 const actionUrl = isGlatDoc ?
@@ -1094,7 +1118,7 @@ const BudgetApp = (function() {
                 if (result.status === 'success') {
                     // Populate Doc Info
                     document.getElementById('modalDocNo').innerText = result.doc_info.document_no;
-                    document.getElementById('modalDocType').innerHTML = result.doc_info.type === 'VET' ? '<span class="badge bg-primary">VET</span>' : result.doc_info.type === 'Medical Equipment' ? '<span class="badge bg-success">Medical Equipment</span>' : result.doc_info.type === 'Computer Equipment' ? '<span class="badge bg-warning text-dark">Computer Equipment</span>' : result.doc_info.type === 'Furniture' ? '<span class="badge bg-secondary">Furniture</span>' : result.doc_info.type === 'Tools & Equipment' ? '<span class="badge bg-dark">Tools & Equipment</span>' : '<span class="badge" style="background-color: #6610f2;">NON VET</span>';
+                    document.getElementById('modalDocType').innerHTML = getDocTypeBadgeHtml(result.doc_info.type);
                     document.getElementById('modalDocBranch').innerText = result.doc_info.base_branch_id;
                     currentBranchCode = result.doc_info.base_branch_id || '';
                     currentCostCenterName = result.doc_info.cost_center_name || '';
@@ -1155,6 +1179,16 @@ const BudgetApp = (function() {
                     const isSoftware = result.doc_info.type === 'Software';
                     const isEquipment = isMed || isComp || isFurniture || isTools || isCar || isRenovate || isSoftware;
                     const isVet = result.doc_info.type === 'VET';
+
+                    // Update section header title and feather icon based on document type
+                    const modalSectionTitle = document.getElementById('modalSectionTitle');
+                    if (modalSectionTitle) {
+                        if (isEquipment) {
+                            modalSectionTitle.innerHTML = '<i data-feather="package" class="me-2"></i>รายละเอียดรายการ (Equipment Details)';
+                        } else {
+                            modalSectionTitle.innerHTML = '<i data-feather="users" class="me-2"></i>รายละเอียดกำลังคน (Manpower Details)';
+                        }
+                    }
 
                     // Update Table 1 and Table 2 card header titles based on document type
                     const modalTable1Header = document.getElementById('modalTable1HeaderTitle');
@@ -1316,6 +1350,7 @@ const BudgetApp = (function() {
                     modalContentEl.classList.remove('modal-content-fade-in');
                     void modalContentEl.offsetWidth;
                     modalContentEl.classList.add('modal-content-fade-in');
+                    if (typeof feather !== 'undefined') feather.replace();
                 } else {
                     if (typeof Swal !== 'undefined') {
                         Swal.fire('เกิดข้อผิดพลาด', result.message, 'error');
@@ -2511,11 +2546,7 @@ const BudgetApp = (function() {
 
                 if (result.status === 'success') {
                     document.getElementById('glModalDocNo').innerText = result.doc_info.document_no;
-                    document.getElementById('glModalDocType').innerHTML = result.doc_info.type === 'GL Entry' ?
-                        '<span class="badge" style="background-color: #0dcaf0;">EXPENSE</span>' :
-                        result.doc_info.type === 'Revenue' ?
-                        '<span class="badge" style="background-color: #84cc16;">Revenue</span>' :
-                        '<span class="badge" style="background-color: #20c997;">Budget Plan</span>';
+                    document.getElementById('glModalDocType').innerHTML = getDocTypeBadgeHtml(result.doc_info.type);
                     document.getElementById('glModalDocBranch').innerText = result.doc_info.base_branch_id;
                     currentGlBranchCode = result.doc_info.base_branch_id || '';
                     currentGlCostCenterName = result.doc_info.cost_center_name || '';
@@ -2554,6 +2585,7 @@ const BudgetApp = (function() {
                     modalContentEl.classList.remove('modal-content-fade-in');
                     void modalContentEl.offsetWidth;
                     modalContentEl.classList.add('modal-content-fade-in');
+                    if (typeof feather !== 'undefined') feather.replace();
                 } else {
                     Swal.fire('ข้อผิดพลาด', result.message || 'ไม่พบเอกสารนี้', 'error');
                     glModalInstance.hide();
@@ -2851,6 +2883,8 @@ const BudgetApp = (function() {
 
                 if (result.status === 'success') {
                     document.getElementById('adjModalDocNo').innerText = result.doc_info.document_no;
+                    const adjDocTypeEl = document.getElementById('adjModalDocType');
+                    if (adjDocTypeEl) adjDocTypeEl.innerHTML = getDocTypeBadgeHtml(result.doc_info.type || 'Position Adjustment');
                     document.getElementById('adjModalDocBranch').innerText = result.doc_info.base_branch_id;
                     currentAdjBranchCode = result.doc_info.base_branch_id || '';
                     currentAdjCostCenterName = result.doc_info.cost_center_name || '';
@@ -4344,6 +4378,8 @@ const BudgetApp = (function() {
 
                 if (result.status === 'success') {
                     document.getElementById('glatModalDocNo').innerText = result.doc_info.document_no;
+                    const glatDocTypeEl = document.getElementById('glatModalDocType');
+                    if (glatDocTypeEl) glatDocTypeEl.innerHTML = getDocTypeBadgeHtml(result.doc_info.type || 'GL Actual Template');
                     document.getElementById('glatModalDocBranch').innerText = result.doc_info.base_branch_id;
                     currentGlatBranchCode = result.doc_info.base_branch_id || '';
                     document.getElementById('glatModalActualYear').innerText = result.doc_info.actual_year;
@@ -4382,6 +4418,7 @@ const BudgetApp = (function() {
                     modalContentEl.classList.remove('modal-content-fade-in');
                     void modalContentEl.offsetWidth;
                     modalContentEl.classList.add('modal-content-fade-in');
+                    if (typeof feather !== 'undefined') feather.replace();
                 } else {
                     Swal.fire('ข้อผิดพลาด', result.message || 'ไม่พบเอกสารนี้', 'error');
                     glatModalInstance.hide();
