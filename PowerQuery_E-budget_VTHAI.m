@@ -791,24 +791,39 @@ let
     LEFT JOIN intra_tl.base_sub_branch bsb ON bsb.sub_branch_id = v.base_branch_id
     LEFT JOIN intra_tl.master_data_ebudget_general_ledger_master glm ON glm.gl_code = v.code
 ),
+user_names AS (
+    SELECT DISTINCT ON (LOWER(username))
+        LOWER(username) AS clean_username,
+        TRIM(CONCAT(first_name, ' ', last_name)) AS full_name
+    FROM intra_tl.auth_user
+    WHERE is_active = true OR is_active IS NULL
+    ORDER BY LOWER(username), last_login DESC NULLS LAST, id DESC
+),
+employee_names AS (
+    SELECT DISTINCT ON (LOWER(employee_id))
+        LOWER(employee_id) AS clean_emp_id,
+        TRIM(CONCAT(prename, firstname, ' ', lastname)) AS full_name
+    FROM public.employee
+    ORDER BY LOWER(employee_id)
+),
 ebudget_with_users AS (
     SELECT
         d.*,
         COALESCE(
-            NULLIF(TRIM(CONCAT(cu.first_name, ' ', cu.last_name)), ''),
-            NULLIF(TRIM(CONCAT(ce.prename, ce.firstname, ' ', ce.lastname)), ''),
+            NULLIF(cu.full_name, ''),
+            NULLIF(ce.full_name, ''),
             d.create_eid
         ) AS create_name,
         COALESCE(
-            NULLIF(TRIM(CONCAT(mu.first_name, ' ', mu.last_name)), ''),
-            NULLIF(TRIM(CONCAT(me.prename, me.firstname, ' ', me.lastname)), ''),
+            NULLIF(mu.full_name, ''),
+            NULLIF(me.full_name, ''),
             d.modify_eid
         ) AS modify_name
     FROM all_ebudget_data d
-    LEFT JOIN intra_tl.auth_user cu ON LOWER(cu.username) = LOWER(d.create_eid)
-    LEFT JOIN public.employee ce ON LOWER(ce.employee_id) = LOWER(d.create_eid)
-    LEFT JOIN intra_tl.auth_user mu ON LOWER(mu.username) = LOWER(d.modify_eid)
-    LEFT JOIN public.employee me ON LOWER(me.employee_id) = LOWER(d.modify_eid)
+    LEFT JOIN user_names cu ON cu.clean_username = LOWER(d.create_eid)
+    LEFT JOIN employee_names ce ON ce.clean_emp_id = LOWER(d.create_eid)
+    LEFT JOIN user_names mu ON mu.clean_username = LOWER(d.modify_eid)
+    LEFT JOIN employee_names me ON me.clean_emp_id = LOWER(d.modify_eid)
 )
 SELECT
     doc_type AS ""ประเภท"",

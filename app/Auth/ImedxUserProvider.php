@@ -76,10 +76,10 @@ class ImedxUserProvider implements UserProvider
                     $firstName = mb_substr($firstNameStr, 0, 150);
                     $lastName = mb_substr(trim((string) ($employee->lastname ?? '')), 0, 150);
 
-                    $user = User::where('username', $username)->first();
+                    $user = User::whereRaw('LOWER(username) = ?', [strtolower(trim($username))])->first();
                     if (! $user) {
                         $user = new User();
-                        $user->username = $username;
+                        $user->username = strtolower(trim($username));
                         $user->first_name = $firstName;
                         $user->last_name = $lastName;
                         $user->email = '';
@@ -114,7 +114,7 @@ class ImedxUserProvider implements UserProvider
 
         // 2. Fallback to local admin account
         try {
-            $localUser = User::where('username', $username)->first();
+            $localUser = User::whereRaw('LOWER(username) = ?', [strtolower(trim($username))])->first();
             if ($localUser && ! empty($localUser->password) && $localUser->password !== '!') {
                 // If account exists in iMedX and is active, local login is strictly forbidden
                 if ($username !== 'admin') {

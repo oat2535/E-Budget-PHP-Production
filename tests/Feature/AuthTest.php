@@ -127,6 +127,24 @@ class AuthTest extends TestCase
         }
     }
 
+    public function test_case_insensitive_username_prevents_duplicate_accounts(): void
+    {
+        User::whereRaw('LOWER(username) = ?', ['test_casing_user'])->delete();
+
+        $user1 = new User();
+        $user1->username = 'test_casing_user';
+        $user1->first_name = 'Case';
+        $user1->last_name = 'Sensitive';
+        $user1->save();
+
+        // Querying with uppercase or mixed case should resolve to the existing user
+        $found = User::whereRaw('LOWER(username) = ?', [strtolower('Test_Casing_User')])->first();
+        $this->assertNotNull($found);
+        $this->assertEquals($user1->id, $found->id);
+
+        $user1->delete();
+    }
+
     public function test_login_event_updates_last_login_timestamp_zero(): void
     {
         $admin = User::where('username', 'admin')->first();
