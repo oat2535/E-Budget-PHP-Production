@@ -137,45 +137,47 @@ class BudgetDocumentApiTest extends TestCase
         \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $oldIds)->delete();
         VetManpower::where('document_no', $docNo)->delete();
 
-        $item = VetManpower::create([
-            'document_no' => $docNo,
-            'position_name' => 'สัตวแพทย์ทั่วไป',
-            'salary' => 300.00,
-            'base_branch_id' => 'R2',
-            'department_id' => 'ACC', // Staged with invalid legacy 'ACC'
-            'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
-            'create_eid' => 'thidarat',
-            'modify_eid' => 'thidarat',
-            'status' => VetManpower::STATUS_PENDING,
-            'budget_year' => 2026,
-        ]);
-
-        $editor = new User(['username' => 'thidarat']);
-        $editor->bank_account_note = 'MANAGER';
-
-        $payload = [
-            [
-                'id' => $item->id,
+        try {
+            $item = VetManpower::create([
+                'document_no' => $docNo,
                 'position_name' => 'สัตวแพทย์ทั่วไป',
                 'salary' => 300.00,
+                'base_branch_id' => 'R2',
+                'department_id' => 'ACC', // Staged with invalid legacy 'ACC'
                 'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
-                'monthly_data' => [
-                    'jan' => ['headcount' => 1, 'cost' => 30000],
+                'create_eid' => 'thidarat',
+                'modify_eid' => 'thidarat',
+                'status' => VetManpower::STATUS_PENDING,
+                'budget_year' => 2026,
+            ]);
+
+            $editor = new User(['username' => 'thidarat']);
+            $editor->bank_account_note = 'IT-ADMIN'; // Privileged editor to allow testing regardless of freeze state
+
+            $payload = [
+                [
+                    'id' => $item->id,
+                    'position_name' => 'สัตวแพทย์ทั่วไป',
+                    'salary' => 300.00,
+                    'cost_center_name' => 'PH (Pet Hospital+Pet Taxi)',
+                    'monthly_data' => [
+                        'jan' => ['headcount' => 1, 'cost' => 30000],
+                    ],
                 ],
-            ],
-        ];
+            ];
 
-        $response = $this->actingAs($editor)->postJson("/api/document/update/VET/{$docNo}", $payload);
-        $response->assertStatus(200);
-        $response->assertJson(['status' => 'success']);
+            $response = $this->actingAs($editor)->postJson("/api/document/update/VET/{$docNo}", $payload);
+            $response->assertStatus(200);
+            $response->assertJson(['status' => 'success']);
 
-        $updatedItem = VetManpower::where('document_no', $docNo)->first();
-        $this->assertNotNull($updatedItem);
-        $this->assertNull($updatedItem->department_id, 'VET Manpower department_id must be null after update');
-
-        $cleanIds = VetManpower::where('document_no', $docNo)->pluck('id');
-        \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $cleanIds)->delete();
-        VetManpower::where('document_no', $docNo)->delete();
+            $updatedItem = VetManpower::where('document_no', $docNo)->first();
+            $this->assertNotNull($updatedItem);
+            $this->assertNull($updatedItem->department_id, 'VET Manpower department_id must be null after update');
+        } finally {
+            $cleanIds = VetManpower::where('document_no', $docNo)->pluck('id');
+            \App\Models\BudgetMonthlyDetail::whereIn('vet_budget_id', $cleanIds)->delete();
+            VetManpower::where('document_no', $docNo)->delete();
+        }
     }
 
     public function test_update_branch_document_by_admin_does_not_inject_admin_department_id(): void
