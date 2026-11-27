@@ -462,8 +462,8 @@ class BudgetService
 
             $headcount = (float) ($mVal['headcount'] ?? 0);
             $cost = (float) ($mVal['cost'] ?? 0);
-            $salary = (float) ($mVal['salary'] ?? 0);
-            $positionAllowance = (float) ($mVal['position_allowance'] ?? 0);
+            $salary = (float) ($mVal['salary'] ?? $mVal['old_salary'] ?? 0);
+            $positionAllowance = (float) ($mVal['position_allowance'] ?? $mVal['old_allowance'] ?? 0);
             $newSalary = (float) ($mVal['new_salary'] ?? 0);
             $newAllowance = (float) ($mVal['new_allowance'] ?? 0);
 

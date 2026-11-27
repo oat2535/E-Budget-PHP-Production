@@ -320,8 +320,18 @@ class DashboardService
         $addLeg('v.position_allowance_general_ledger_code', 'COALESCE(md.position_allowance, 0)', 'FROM ebudget_non_vet_manpower v INNER JOIN ebudget_monthly_detail md ON md.non_vet_budget_id = v.id', 'v.position_allowance_general_ledger_code');
 
         // 3a/3b. Position Adjustment
-        $addLeg('v.salary_general_ledger_code', 'COALESCE(md.new_salary, 0) - COALESCE(md.salary, 0)', 'FROM ebudget_position_adjustment v INNER JOIN ebudget_monthly_detail md ON md.position_adj_id = v.id', 'v.salary_general_ledger_code');
-        $addLeg('v.allowance_general_ledger_code', 'COALESCE(md.new_allowance, 0) - COALESCE(md.position_allowance, 0)', 'FROM ebudget_position_adjustment v INNER JOIN ebudget_monthly_detail md ON md.position_adj_id = v.id', 'v.allowance_general_ledger_code');
+        $addLeg(
+            'v.salary_general_ledger_code',
+            'CASE WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 THEN COALESCE(md.cost, 0) * (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))) ELSE 0 END',
+            'FROM ebudget_position_adjustment v INNER JOIN ebudget_monthly_detail md ON md.position_adj_id = v.id',
+            'v.salary_general_ledger_code'
+        );
+        $addLeg(
+            'v.allowance_general_ledger_code',
+            'CASE WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 THEN COALESCE(md.cost, 0) * (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))) ELSE 0 END',
+            'FROM ebudget_position_adjustment v INNER JOIN ebudget_monthly_detail md ON md.position_adj_id = v.id',
+            'v.allowance_general_ledger_code'
+        );
 
         // 4-10. Seven Fix Asset tables
         foreach (self::FIX_ASSET_SOURCES as [$tag, $modelClass, $fkCol]) {

@@ -345,9 +345,17 @@ let
         NULL::numeric(14, 2),
         md.new_salary,
         NULL::numeric(14, 2),
-        (COALESCE(md.new_salary, 0) - COALESCE(md.salary, 0))::numeric(14, 2) AS monthly_diff_salary,
+        CASE 
+            WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 
+            THEN (COALESCE(md.cost, 0) * (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))))::numeric(14, 2)
+            ELSE 0::numeric(14, 2) 
+        END AS monthly_diff_salary,
         NULL::numeric(14, 2),
-        (COALESCE(md.new_salary, 0) - COALESCE(md.salary, 0))::numeric(14, 2),
+        CASE 
+            WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 
+            THEN (COALESCE(md.cost, 0) * (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))))::numeric(14, 2)
+            ELSE 0::numeric(14, 2) 
+        END,
         NULL::numeric(14, 2),
         NULL::numeric(14, 2),
         NULL::numeric(14, 2),
@@ -428,8 +436,16 @@ let
         NULL::numeric(14, 2),
         md.new_allowance,
         NULL::numeric(14, 2),
-        (COALESCE(md.new_allowance, 0) - COALESCE(md.position_allowance, 0))::numeric(14, 2) AS monthly_diff_allowance,
-        (COALESCE(md.new_allowance, 0) - COALESCE(md.position_allowance, 0))::numeric(14, 2),
+        CASE 
+            WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 
+            THEN (COALESCE(md.cost, 0) * (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))))::numeric(14, 2)
+            ELSE 0::numeric(14, 2) 
+        END AS monthly_diff_allowance,
+        CASE 
+            WHEN (COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) <> 0 
+            THEN (COALESCE(md.cost, 0) * (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0)) / ((COALESCE(v.new_salary, 0) - COALESCE(v.old_salary, 0)) + (COALESCE(v.new_allowance, 0) - COALESCE(v.old_allowance, 0))))::numeric(14, 2)
+            ELSE 0::numeric(14, 2) 
+        END,
         NULL::numeric(14, 2),
         NULL::numeric(14, 2),
         NULL::numeric(14, 2),
@@ -910,11 +926,18 @@ SELECT
                 ELSE COALESCE(monthly_cost, 0)
             END
 
-        -- 2. หมวดรายเดือนปกติ + Manpower แยกบรรทัด + รายได้ + Budget Plan:
-        --    ใช้ monthly_cost ซึ่ง CTE แยก Salary_Line / Allowance_Line / Diff มาตรงๆ จากฐานข้อมูลแล้ว
-        --    (ป้องกันหารด้วย 0 / NULL กรณี Position Adjustment ที่ผลต่างสุทธิเป็น 0 และครอบคลุม Budget Plan)
+        -- 2. Position Adjustment: แยกตาม row_type อย่างชัดเจน (Salary_Line = ผลต่างเงินเดือน, Allowance_Line = ผลต่างค่าตำแหน่ง)
+        WHEN doc_type = 'Position Adjustment' THEN
+            CASE
+                WHEN row_type = 'Salary_Line' THEN COALESCE(monthly_diff_salary, 0)
+                WHEN row_type = 'Allowance_Line' THEN COALESCE(monthly_diff_allowance, 0)
+                ELSE COALESCE(monthly_cost, 0)
+            END
+
+        -- 3. หมวดรายเดือนปกติ + Manpower แยกบรรทัด + รายได้ + Budget Plan:
+        --    ใช้ monthly_cost ซึ่ง CTE แยก Salary_Line / Allowance_Line มาตรงๆ จากฐานข้อมูลแล้ว
         WHEN doc_type IN (
-            'VET Manpower', 'NON VET Manpower', 'Position Adjustment',
+            'VET Manpower', 'NON VET Manpower',
             'GL Entry', 'Revenue', 'Budget Plan'
         ) THEN COALESCE(monthly_cost, 0)
 
